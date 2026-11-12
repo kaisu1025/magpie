@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
@@ -62,17 +61,6 @@ func webCmd(args []string) error {
 		}
 		return nil
 	}
-	// the app serves this page on this port already (Settings › Network
-	// and sharing › Browser access): its own is the one to open
-	if a, k := gui.AppPage(); a != "" && samePort(a, addr) && answers(a) {
-		link := webLink(a, k)
-		fmt.Println(green.Render("●"), "the magpie app serves this page:", bold.Render(link))
-		fmt.Println(muted.Render("  Settings › Network and sharing › Browser access turns it off"))
-		if open {
-			openInBrowser(link)
-		}
-		return nil
-	}
 	// what this page's gateway starts (agents, MCP servers) gets the node a
 	// version manager put on PATH only in the shell's profile, as the app's
 	// does: a service or autostart has none of it (#3803)
@@ -100,27 +88,6 @@ func webCmd(args []string) error {
 		openInBrowser(w.Link)
 	}
 	return w.Wait()
-}
-
-// samePort: a and b (host:port) name one port.
-func samePort(a, b string) bool {
-	_, pa, ea := net.SplitHostPort(a)
-	_, pb, eb := net.SplitHostPort(b)
-	return ea == nil && eb == nil && pa == pb
-}
-
-// answers: something listens on addr's port on this computer.
-func answers(addr string) bool {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return false
-	}
-	c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), 500*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	c.Close()
-	return true
 }
 
 // printWeb prints where a started page is, and what its link carries.
@@ -250,4 +217,15 @@ func serveCmd(args []string) error {
 	}
 	printWeb(w)
 	return w.Wait()
+}
+
+// openInBrowser opens url in the user's browser. It is a variable so the
+// tests can have it go nowhere without starting a program (noBrowser).
+var openInBrowser = openURLInBrowser
+
+func openURLInBrowser(url string) {
+	// the link is printed beside it, to open by hand when this fails (#2043)
+	if err := proc.OpenBrowser(url); err != nil {
+		fmt.Fprintln(os.Stderr, "magpie couldn't open the browser:", err)
+	}
 }

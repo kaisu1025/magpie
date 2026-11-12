@@ -136,7 +136,14 @@ magpie.plugin("usage", (ctx) => {
     <p class="usage-note" id="sessNote"></p>
   </div>
 `,
-    mount() { mountUsageFolds(); },
+    mount() {
+      mountUsageFolds();
+      if (enterpriseDesktop) {
+        const scope = $("#ledScope");
+        scope.dataset.en = localUsageScope;
+        scope.textContent = t(localUsageScope);
+      }
+    },
     open() { return loadUsage(true).catch((e) => status(e.message, "err")); },
     refresh(again) {
       // on the Overview, where the allowances are, coming back is opening them (#1588)

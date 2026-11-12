@@ -31,6 +31,7 @@ import (
 	"github.com/yetone/magpie/internal/awake"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexrelay"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
@@ -860,53 +861,59 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go filememo.Watch(freshCtx, pluginrt.Path(), settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
 	go pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
 	// and the MCP hub's servers that the Library no longer gives are ended
-	go keepHubPruned(freshCtx)
+	if !edition.Enterprise() {
+		go keepHubPruned(freshCtx)
+	}
 	srv := &http.Server{Handler: s.closesWhenHandedOff(s.Front()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute, ConnState: s.unread.note}
-	// the magpie serving the gateway, and only it, keeps the saved accounts
-	// signed in, so two never refresh one sign-in at once
-	go provider.KeepLoginsAlive(ctx)
-	// and tells the request hooks of an account to sign in again
-	go keepHooksToldOfSignIns(ctx)
-	// and signs Codex and Claude Code in to their next account when the
-	// one they are on is spent
-	go provider.KeepOnAnAccountWithRoom(ctx)
-	// and has the Codex app read its provider again as magpie becomes it
-	// for a used-up ChatGPT account, and after (its Send greys otherwise)
-	go provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy)
-	// and, when settings say to, starts its accounts' next windows as the last reset
-	go provider.KeepCodexWindowsWarm(ctx)
-	go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
-	// and spends a Codex reset about to run out unused, for the accounts
-	// that let it
-	go provider.KeepResetsFromRunningOut(ctx)
-	// and checks the WorkBuddy accounts in for the day's credits
-	go provider.KeepWorkBuddyCheckedIn(ctx)
-	// and the Trae CN accounts (#694), and the MiniMax Code ones (#811)
-	go provider.KeepTraeCheckedIn(ctx)
-	go provider.KeepMiniMaxCheckedIn(ctx)
-	// and the Qoder ones' daily credits
-	go provider.KeepQoderCheckedIn(ctx)
-	// and the accounts of the plugins that check in themselves
-	go provider.KeepPluginsCheckedIn(ctx)
-	// and counts the calls those plugins' accounts made outside magpie
-	// (Cursor's editor and cursor-agent) on the Usage page
-	go usage.KeepOutsideCallsRead(ctx)
-	// and moves the built-in subscriptions being retired onto their plugins
-	go provider.KeepRetiringMoved(ctx)
-	// and fetches the partner list every hour, asked for or not
-	go provider.KeepPartnersFresh(ctx)
-	go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
-	// and renews the plugins' sign-ins as they come due, used or not (#5080)
-	go provider.KeepPluginsSignedIn(ctx)
-	// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)
-	go provider.KeepAccountsListed(ctx)
+	if !edition.Enterprise() {
+		// the magpie serving the gateway, and only it, keeps the saved accounts
+		// signed in, so two never refresh one sign-in at once
+		go provider.KeepLoginsAlive(ctx)
+		// and tells the request hooks of an account to sign in again
+		go keepHooksToldOfSignIns(ctx)
+		// and signs Codex and Claude Code in to their next account when the
+		// one they are on is spent
+		go provider.KeepOnAnAccountWithRoom(ctx)
+		// and has the Codex app read its provider again as magpie becomes it
+		// for a used-up ChatGPT account, and after (its Send greys otherwise)
+		go provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy)
+		// and, when settings say to, starts its accounts' next windows as the last reset
+		go provider.KeepCodexWindowsWarm(ctx)
+		go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
+		// and spends a Codex reset about to run out unused, for the accounts
+		// that let it
+		go provider.KeepResetsFromRunningOut(ctx)
+		// and checks the WorkBuddy accounts in for the day's credits
+		go provider.KeepWorkBuddyCheckedIn(ctx)
+		// and the Trae CN accounts (#694), and the MiniMax Code ones (#811)
+		go provider.KeepTraeCheckedIn(ctx)
+		go provider.KeepMiniMaxCheckedIn(ctx)
+		// and the Qoder ones' daily credits
+		go provider.KeepQoderCheckedIn(ctx)
+		// and the accounts of the plugins that check in themselves
+		go provider.KeepPluginsCheckedIn(ctx)
+		// and counts the calls those plugins' accounts made outside magpie
+		// (Cursor's editor and cursor-agent) on the Usage page
+		go usage.KeepOutsideCallsRead(ctx)
+		// and moves the built-in subscriptions being retired onto their plugins
+		go provider.KeepRetiringMoved(ctx)
+		// and fetches the partner list every hour, asked for or not
+		go provider.KeepPartnersFresh(ctx)
+		go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
+		// and renews the plugins' sign-ins as they come due, used or not (#5080)
+		go provider.KeepPluginsSignedIn(ctx)
+		// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)
+		go provider.KeepAccountsListed(ctx)
+	}
 	// and fetches the lists of the providers the user asked to keep fresh (#2135)
 	go provider.KeepListsFresh(ctx)
 	// and follows a Remote magpie's list as it changes there (KaCli)
 	go provider.KeepRemoteListsFollowed(ctx)
 	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
-	go plugin.KeepUpdated(ctx)
-	go plugin.KeepBunUpdated(ctx)
+	if !edition.Enterprise() {
+		go plugin.KeepUpdated(ctx)
+		go plugin.KeepBunUpdated(ctx)
+	}
 	// and, when settings say to, keeps the computer awake while agents work
 	go awake.Keep(ctx, func() awake.Level {
 		switch set := settings.Load(); {
@@ -925,7 +932,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	// and, on Windows, serves WSL distros under NAT at Windows' address on
 	// their network (wsl.go)
-	go s.serveWSL(ctx, srv)
+	if edition.Current() != edition.Server {
+		go s.serveWSL(ctx, srv)
+	}
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
@@ -1037,7 +1046,9 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("GET "+routeEventsPath, s.routeEvents)
 	mux.HandleFunc("GET /v1/magpie/concurrency", s.concurrency)
 	mux.HandleFunc("GET /v1/magpie/limit", s.keyLimit)
-	mux.HandleFunc("GET "+OwnMCPPath, s.ownMCPList)
+	if !edition.Enterprise() {
+		mux.HandleFunc("GET "+OwnMCPPath, s.ownMCPList)
+	}
 	// short-lived keys, issued by a key let issue them or from loopback
 	// (issue_keys.go)
 	mux.HandleFunc("POST "+KeysPath, s.issueKey)
@@ -1115,21 +1126,23 @@ func (s *Server) routes() *routeMux {
 	for _, m := range nativeMethods {
 		mux.HandleFunc(m+" "+NativePath+"{provider}/{path...}", s.native)
 	}
-	mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
-	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
-	mux.HandleFunc("/mcp/run/{name}", runMCP)
-	mux.HandleFunc(SearchMCPPath, s.searchMCP)
-	mux.HandleFunc(VisionMCPPath, s.visionMCP)
-	mux.HandleFunc(MemoryMCPPath, s.memoryMCP)
-	mux.HandleFunc(ImageMCPPath, s.imageMCP)
-	mux.HandleFunc(BrowserMCPPath, s.browserMCP)
-	mux.HandleFunc("GET "+BrowserExtensionPath, s.browserExtension)
-	mux.HandleFunc("GET "+BrowserStatusPath, s.browserStatus)
-	mux.HandleFunc(ImageMCPFiles+"{name}", s.imageMCPFile)
-	mux.HandleFunc(ToolsMCPPath, s.toolsMCP)
-	mux.HandleFunc(ToolsMCPOne+"{plugin}", s.toolsMCPOne)
-	mux.HandleFunc(HubMCPPath+"{agent}", s.hubMCP)
-	mux.HandleFunc(HubMCPAll, s.hubMCP)
+	if !edition.Enterprise() {
+		mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
+		mux.HandleFunc("/mcp/{name}", s.mcpProxy)
+		mux.HandleFunc("/mcp/run/{name}", runMCP)
+		mux.HandleFunc(SearchMCPPath, s.searchMCP)
+		mux.HandleFunc(VisionMCPPath, s.visionMCP)
+		mux.HandleFunc(MemoryMCPPath, s.memoryMCP)
+		mux.HandleFunc(ImageMCPPath, s.imageMCP)
+		mux.HandleFunc(BrowserMCPPath, s.browserMCP)
+		mux.HandleFunc("GET "+BrowserExtensionPath, s.browserExtension)
+		mux.HandleFunc("GET "+BrowserStatusPath, s.browserStatus)
+		mux.HandleFunc(ImageMCPFiles+"{name}", s.imageMCPFile)
+		mux.HandleFunc(ToolsMCPPath, s.toolsMCP)
+		mux.HandleFunc(ToolsMCPOne+"{plugin}", s.toolsMCPOne)
+		mux.HandleFunc(HubMCPPath+"{agent}", s.hubMCP)
+		mux.HandleFunc(HubMCPAll, s.hubMCP)
+	}
 	mux.HandleFunc(CodexPath+"/", s.codexBackend)
 	mux.HandleFunc("GET "+CodexCatalogPath, s.codexCatalog)
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
@@ -1173,7 +1186,11 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	// its MCP router has a server to give, for another magpie that has
 	// this one as a Remote magpie to give it a server of its own
 	// (provider/remote_hub.go); told to whoever the router answers
-	if (local(r) || sharedWith(r)) && hubServes() {
+	if edition.Enterprise() {
+		out["apis"] = slices.DeleteFunc(out["apis"].([]string), func(api string) bool {
+			return api == OwnMCPPath || strings.HasPrefix(api, "/mcp/")
+		})
+	} else if (local(r) || sharedWith(r)) && hubServes() {
 		out["mcp_hub"] = true
 	}
 	writeJSON(w, 200, out)

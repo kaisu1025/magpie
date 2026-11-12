@@ -34,6 +34,8 @@ func TestMainView(t *testing.T) {
 		{url.Values{"view": {"settings"}, "key": {"7"}}, "settings"},
 		{url.Values{"view": {"usage"}}, "usage"},
 		{url.Values{"view": {"usage"}, "tab": {"requests"}, "provider": {"codex"}}, "usage&tab=requests&provider=codex"},
+		{url.Values{"view": {"usage"}, "tab": {"requests"}, "period": {"7d"}, "day": {"2026-09-30"}, "provider": {"relay"}}, "usage&tab=requests&period=7d&day=2026-09-30&provider=relay"},
+		{url.Values{"view": {"usage"}, "tab": {"requests"}, "period": {"today&view=settings"}, "day": {"2026-02-30"}}, "usage&tab=requests"},
 		{url.Values{"view": {"usage"}, "tab": {"requests"}, "agent": {"claude-desktop"}, "provider": {"relay team"}}, "usage&tab=requests&provider=relay+team&agent=claude-desktop"},
 		{url.Values{"view": {"usage"}, "tab": {"other"}, "provider": {"x&view=settings"}}, "usage"},
 		{url.Values{"view": {"settings"}, "provider": {"codex"}}, "settings"},

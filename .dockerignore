@@ -2,7 +2,7 @@
 .git
 .github
 dist
-site
+internal/gui/assets.zip
 build
 magpie.app
 /*.md

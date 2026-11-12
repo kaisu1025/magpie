@@ -180,63 +180,54 @@ const (
 
 // cliForRoute is the command that does what a route does, as `magpie …`.
 var cliForRoute = map[string]string{
-	"GET /api/agent-models/{id}":           "magpie models",
-	"GET /api/settings":                    "magpie settings list",
-	"POST /api/settings":                   "magpie settings set",
-	"POST /api/settings/account-discovery": "magpie accounts discovery",
-	"POST /api/settings/search-api":        "magpie search",
-	"POST /api/settings/search-key":        "magpie search",
-	"POST /api/settings/search-count":      "magpie search count",
-	"POST /api/settings/update-mirror":     "magpie update mirror",
-	"POST /api/sync":                       "magpie sync",
-	"GET /api/davsync":                     "magpie webdav",
-	"POST /api/backup/export":              "magpie backup",
-	"POST /api/backup/import":              "magpie restore",
-	"GET /api/datafolder":                  "magpie data",
-	"POST /api/datafolder/{action}":        "magpie data move",
-	"POST /api/davsync/{action}":           "magpie webdav",
-	"GET /api/caller-keys":                 "magpie gateway-key list",
-	"POST /api/caller-keys/{action}":       "magpie gateway-key",
-	"GET /api/account-groups":              "magpie gateway-key groups",
-	"POST /api/account-groups/{action}":    "magpie gateway-key groups",
-	"GET /api/groups":                      "magpie groups",
-	"POST /api/groups/{action}":            "magpie group",
-	"GET /api/import/{id}":                 "magpie import",
-	"GET /api/settings/https":              "magpie https",
-	"POST /api/settings/https":             "magpie https on",
-	"POST /api/settings/https/ca":          "magpie https ca",
-	"POST /api/settings/https/import":      "magpie https import",
-	"POST /api/settings/https/remove":      "magpie https remove",
-	"POST /api/settings/mtls":              "magpie mtls on",
-	"POST /api/settings/mtls/issue":        "magpie mtls issue",
-	"POST /api/settings/mtls/revoke":       "magpie mtls revoke",
-	"GET /api/library":                     "magpie library",
-	"POST /api/library/{what}/{action}":    "magpie library",
-	"GET /api/plugins":                     "magpie plugin",
-	"POST /api/plugins/{op}":               "magpie plugin",
-	"GET /api/login/usage":                 "magpie quota",
-	"GET /api/providers":                   "magpie providers",
-	"POST /api/provider/{action}":          "magpie provider",
-	"GET /api/sessions/reads":              "magpie sessions read",
-	"POST /api/sessions/reads":             "magpie sessions read",
-	"GET /api/sessions":                    "magpie sessions",
-	"POST /api/uninstall":                  "magpie uninstall",
-	"GET /api/usage":                       "magpie usage",
-	"GET /api/usage/quotas":                "magpie quota",
-	"GET /api/usage/quotas/history":        "magpie quota history",
-	"GET /api/usage/requests.csv":          "magpie usage --csv",
-	"POST /api/usage/workbuddy-checkin":    "magpie accounts checkin",
-	"GET /api/update":                      "magpie update check",
-	"POST /api/update/check":               "magpie update check",
-	"POST /api/settings/agent-compact":     "magpie model compact",
-	"POST /api/settings/agent-suffix":      "magpie model suffix",
-	"POST /api/settings/context-cap":       "magpie model context-cap",
-	"POST /api/update/install":             "magpie update",
-	"GET /api/model-price":                 "magpie model price",
-	"POST /api/model-price":                "magpie model price",
+	"GET /api/agent-models/{id}":        "magpie models",
+	"GET /api/settings":                 "magpie settings list",
+	"POST /api/settings":                "magpie settings set",
+	"POST /api/settings/search-api":     "magpie search",
+	"POST /api/settings/search-key":     "magpie search",
+	"POST /api/settings/search-count":   "magpie search count",
+	"POST /api/sync":                    "magpie sync",
+	"GET /api/datafolder":               "magpie data",
+	"POST /api/datafolder/{action}":     "magpie data move",
+	"GET /api/caller-keys":              "magpie gateway-key list",
+	"POST /api/caller-keys/{action}":    "magpie gateway-key",
+	"GET /api/account-groups":           "magpie gateway-key groups",
+	"POST /api/account-groups/{action}": "magpie gateway-key groups",
+	"GET /api/groups":                   "magpie groups",
+	"POST /api/groups/{action}":         "magpie group",
+	"GET /api/import/{id}":              "magpie import",
+	"GET /api/settings/https":           "magpie https",
+	"POST /api/settings/https":          "magpie https on",
+	"POST /api/settings/https/ca":       "magpie https ca",
+	"POST /api/settings/https/import":   "magpie https import",
+	"POST /api/settings/https/remove":   "magpie https remove",
+	"POST /api/settings/mtls":           "magpie mtls on",
+	"POST /api/settings/mtls/issue":     "magpie mtls issue",
+	"POST /api/settings/mtls/revoke":    "magpie mtls revoke",
+	"GET /api/login/usage":              "magpie quota",
+	"GET /api/providers":                "magpie providers",
+	"POST /api/provider/{action}":       "magpie provider",
+	"POST /api/uninstall":               "magpie uninstall",
+	"GET /api/usage":                    "magpie usage",
+	"GET /api/usage/quotas":             "magpie quota",
+	"GET /api/usage/quotas/history":     "magpie quota history",
+	"GET /api/usage/requests.csv":       "magpie usage --csv",
+	"POST /api/settings/agent-compact":  "magpie model compact",
+	"POST /api/settings/agent-suffix":   "magpie model suffix",
+	"POST /api/settings/context-cap":    "magpie model context-cap",
+	"GET /api/model-price":              "magpie model price",
+	"POST /api/model-price":             "magpie model price",
 }
 
 var notYet = map[string]string{
+	"POST /api/settings/account-discovery":       W,
+	"POST /api/settings/update-mirror":           W,
+	"GET /api/sessions/reads":                    W,
+	"POST /api/sessions/reads":                   W,
+	"POST /api/usage/workbuddy-checkin":          W,
+	"GET /api/update":                            W,
+	"POST /api/update/check":                     W,
+	"POST /api/update/install":                   W,
 	"POST /api/agent-fast":                       A,  // agent_models.go
 	"POST /api/agent-models/{id}":                A,  // agent_models.go
 	"GET /api/agents/cli":                        A,  // api.go
@@ -247,9 +238,6 @@ var notYet = map[string]string{
 	"GET /api/notices":                           W,  // api.go
 	"GET /api/omarchy":                           W,  // api.go
 	"GET /api/quit":                              W,  // api.go: the window's Quit question
-	"GET /api/remote":                            W,  // remote.go: another magpie opened in a window of the app
-	"POST /api/remote":                           W,  // remote.go
-	"POST /api/remote/forget":                    W,  // remote.go
 	"GET /api/state":                             W,  // api.go
 	"POST /api/agents/{action}/{id}":             A,  // api.go
 	"POST /api/agents/arrange":                   W,  // api.go
@@ -303,8 +291,6 @@ var notYet = map[string]string{
 	"POST /api/settings/minimax-checkin":         S2, // api.go
 	"POST /api/settings/panel-shortcut":          W,  // api.go
 	"POST /api/settings/plain-names":             S2, // api.go
-	"POST /api/settings/plugin-checkin":          S2, // api.go
-	"POST /api/settings/plugin-option":           S2, // api.go
 	"POST /api/settings/port":                    S2, // api.go
 	"POST /api/settings/qoder-checkin":           S2, // api.go
 	"POST /api/settings/quota-left":              S2, // api.go
@@ -325,23 +311,13 @@ var notYet = map[string]string{
 	"POST /api/usage/arrange":                    W,  // api.go
 	"POST /api/warm-now":                         A,  // api.go
 	"POST /api/window/{action}":                  W,  // api.go
-	"GET /api/autobackup":                        S2, // backup.go: Back up by itself
-	"POST /api/autobackup/{action}":              S2, // backup.go
 	"GET /api/archive":                           S2, // archive.go
 	"GET /api/archive/file":                      S2, // archive.go
 	"POST /api/archive/export":                   S2, // archive.go
 	"POST /api/settings/archive":                 S2, // archive.go
-	"GET /api/web-page":                          W,  // apppage.go
-	"POST /api/web-page":                         W,  // apppage.go
 	"GET /api/plugins/builtin":                   P,  // builtins.go
 	"POST /api/plugins/builtin":                  P,  // builtins.go
-	"GET /api/plugins/counts":                    P,  // plugins_counts.go: Discover's installs and likes
 	"GET /api/catalog/models":                    P,  // catalog_models.go: the model editor's Same as picker
-	"POST /api/plugins/like":                     P,  // plugins_counts.go
-	"GET /api/library/browser":                   L,  // browser.go
-	"POST /api/library/browser/setup":            L,  // browser.go
-	"POST /api/library/browser/drag":             L,  // browser.go
-	"POST /api/library/browser/extension":        L,  // browser.go
 	"GET /api/caller-keys/models":                P,  // caller_keys.go
 	"GET /api/caller-keys/mcp":                   L,  // caller_keys.go: the servers `magpie gateway-key mcp` takes
 	"POST /api/config/repair":                    A,  // config_repair.go
@@ -370,74 +346,8 @@ var notYet = map[string]string{
 	"POST /api/masking/clear":                    U,  // masking.go
 	"POST /api/masking/preview":                  U,  // masking.go
 	"POST /api/masking/values":                   U,  // masking.go
-	"GET /api/library/bili":                      L,  // library.go
-	"GET /api/library/icon":                      W,  // library.go
-	"GET /api/library/market/servers":            L,  // library.go
-	"GET /api/library/market/skills":             L,  // library.go
-	"GET /api/library/market/pi":                 L,  // library.go
-	"GET /api/library/mcp-signin/{id}":           L,  // library.go
-	"GET /api/library/pi":                        L,  // library.go
-	"GET /api/library/rtk":                       L,  // library.go
-	"GET /api/library/skill":                     L,  // library.go
-	"POST /api/library/bili":                     L,  // library.go
-	"POST /api/library/bili/install":             L,  // library.go
-	"POST /api/library/market/about":             L,  // library.go
-	"POST /api/library/mcp-signin":               L,  // library.go
-	"POST /api/library/mcp-signin/{id}/cancel":   L,  // library.go
-	"POST /api/library/mcp-signout":              L,  // library.go
-	"POST /api/library/mcp/check":                L,  // library.go
-	"POST /api/library/mcp/config":               L,  // library.go
-	"POST /api/library/pi":                       L,  // library.go
-	"POST /api/library/pi/copy":                  L,  // library.go
-	"POST /api/library/pi/install":               L,  // library.go
-	"POST /api/library/pi/remove":                L,  // library.go
-	"POST /api/library/projects/choose":          W,  // library.go
-	"POST /api/library/reveal":                   W,  // library.go
-	"POST /api/library/rtk":                      L,  // library.go
-	"POST /api/library/rtk/install":              L,  // library.go
-	"POST /api/library/rtk/path":                 L,  // library.go
-	"POST /api/library/rtk/upgrade":              L,  // library.go
-	"POST /api/library/skills/check":             L,  // library.go
-	"POST /api/library/skills/probe":             L,  // library.go
-	"POST /api/library/plugins/probe":            L,  // library.go
-	"GET /api/memory":                            L,  // memory.go
-	"POST /api/memory":                           L,  // memory.go
-	"POST /api/memory/digest":                    L,  // memory.go
-	"POST /api/memory/remove":                    L,  // memory.go
-	"POST /api/memory/status":                    L,  // memory.go
-	"GET /api/memory/distill":                    L,  // memory_distill.go
-	"POST /api/memory/distill":                   L,  // memory_distill.go
-	"POST /api/memory/distill/run":               L,  // memory_distill.go
-	"POST /api/memory/distill/stop":              L,  // memory_distill.go
-	"POST /api/memory/dream":                     L,  // memory_distill.go
-	"POST /api/memory/dream/run":                 L,  // memory_distill.go
-	"POST /api/memory/dream/undo":                L,  // memory_distill.go
-	"GET /api/memory/semantic":                   L,  // memory_semantic.go
-	"POST /api/memory/semantic":                  L,  // memory_semantic.go
-	"POST /api/memory/rank":                      L,  // memory_semantic.go
-	"POST /api/library/skills/regroup":           W,  // library.go
 	"GET /api/omarchy/widget":                    W,  // omarchy.go
 	"POST /api/omarchy/widget":                   W,  // omarchy.go
-	"GET /api/plugin-pages":                      W,  // pluginpage.go
-	"GET /api/plugin-panels":                     W,  // pluginpage.go
-	"POST /api/plugin-pages/image":               W,  // pageimage.go
-	"POST /api/plugin-pages/options":             W,  // pluginpage.go
-	"POST /api/plugin-pages/read":                W,  // pluginpage.go
-	"GET /api/plugins/agents":                    P,  // plugins.go
-	"GET /api/plugins/git":                       P,  // plugins.go
-	"GET /api/plugins/github":                    P,  // plugins.go
-	"GET /api/plugins/listings":                  P,  // plugins.go
-	"GET /api/plugins/market":                    P,  // plugins.go
-	"GET /api/plugins/npm":                       P,  // plugins.go
-	"GET /api/plugins/page":                      P,  // plugins.go
-	"GET /api/plugins/search":                    P,  // plugins.go
-	"GET /api/plugins/updates":                   P,  // plugins.go
-	"POST /api/plugin-signin":                    P,  // plugins.go
-	"POST /api/plugin-signin/prompt":             P,  // plugins.go
-	"POST /api/plugins/check":                    P,  // plugins.go
-	"POST /api/plugins/choose":                   W,  // plugins.go
-	"POST /api/plugins/mirror":                   P,  // plugins.go
-	"POST /api/plugins/registry":                 P,  // plugins.go
 	"GET /api/privacy-model":                     S2, // privacymodel.go
 	"POST /api/privacy-model":                    S2, // privacymodel.go
 	"GET /api/claude/mode":                       P,  // providers.go
@@ -465,25 +375,6 @@ var notYet = map[string]string{
 	"POST /api/signin/export":                    P,  // providers.go
 	"POST /api/stepfun/{id}/session":             P,  // providers.go
 	"POST /api/stepfun/{id}/signout":             P,  // providers.go
-	"GET /api/speeds":                            U,  // sessions_manage.go: the Sessions row's speed curve
-	"GET /api/sessions/manage":                   U,  // sessions_manage.go
-	"GET /api/sessions/search":                   U,  // sessions_manage.go
-	"POST /api/sessions/codex-provider":          U,  // sessions_manage.go
-	"POST /api/sessions/delete":                  U,  // sessions_manage.go
-	"POST /api/sessions/purge":                   U,  // sessions_manage.go
-	"POST /api/sessions/recording":               U,  // sessions_manage.go
-	"POST /api/sessions/relocate-claude":         U,  // sessions_manage.go
-	"POST /api/sessions/restore":                 U,  // sessions_manage.go
-	"GET /api/sessions/markdown":                 U,  // sessions.go
-	"GET /api/sessions/one":                      U,  // sessions.go
-	"GET /api/sessions/overview":                 U,  // sessions.go
-	"GET /api/sessions/progress":                 U,  // sessions.go
-	"GET /api/sessions/stats":                    U,  // sessions.go
-	"GET /api/sessions/transcript":               U,  // sessions.go
-	"POST /api/agents/open":                      W,  // sessions.go
-	"POST /api/sessions/carry":                   U,  // sessions.go
-	"POST /api/sessions/export":                  U,  // sessions.go
-	"POST /api/sessions/terminal":                W,  // sessions.go
 	"GET /api/model-loads":                       U,  // speeds.go
 	"GET /api/model-speeds":                      U,  // speeds.go
 	"GET /api/gateway/held/{name}":               U,  // trace.go

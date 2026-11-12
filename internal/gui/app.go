@@ -23,8 +23,8 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/autostart"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
-	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/omarchy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
@@ -589,26 +589,10 @@ func Run(version string, showMain bool, link string) error {
 		return false
 	}
 	updates.start()
-	news.start()
-	// the library written into the agents again, once: one installed or
-	// updated since (or an edit by hand) gets it without a visit to the page
-	go func() {
-		if res, err := library.Sync(); err != nil {
-			log.Println("library sync:", err)
-		} else {
-			for _, p := range res.Problems {
-				log.Println("library sync:", p.Agent, p.What, p.Error)
-			}
-		}
-		// a set kept in a file of the user's (~/.agents/AGENTS.md) is
-		// edited outside magpie: the agents get each change, until this
-		// one has handed the gateway to the new version (#4938)
-		library.KeepLinked(backendCtx, 30*time.Second)
-	}()
-	// conversations read into memory, when switched on (Memory tab)
-	go keepDistilling(backendCtx)
-	// memories read for search by meaning, when switched on
-	go keepEmbedding(backendCtx)
+	if !edition.Enterprise() {
+		news.start()
+
+	}
 
 	// before the item is made, which starts as hidden as AppKit kept it
 	hiddenAtStart := bringTrayBack()
@@ -748,10 +732,6 @@ func Run(version string, showMain bool, link string) error {
 	// GTK 3 with no font DPI set would lay every page out at a negative
 	// width (#1371); give it one before the first webview is made.
 	fontDPI()
-	// the page to a browser too, where Settings says (apppage.go)
-	if ownPage {
-		startAppPage(h, gw)
-	}
 	return h.app.Run()
 }
 

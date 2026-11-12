@@ -20,6 +20,7 @@ import (
 
 	"github.com/klauspost/compress/gzhttp"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/update"
@@ -75,6 +76,12 @@ const webRunKey = "MAGPIE_WEB_RUNKEY"
 // LazyCat box, MAGPIE_WEB_SIGN_IN=lazycat lets the box's administrators in
 // without it, signed in to the box (webBoxSignIn).
 func StartWeb(addr, version string) (*Web, error) {
+	if edition.Current() == edition.Desktop {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || host != "localhost" && !net.ParseIP(host).IsLoopback() {
+			return nil, fmt.Errorf("the enterprise desktop only serves its page on loopback")
+		}
+	}
 	Version = version
 	key, fixed, err := webKey()
 	if err != nil {
@@ -226,13 +233,6 @@ func webGuard(cookie, key string, keep time.Duration, box boxSignIn, next http.H
 		http.Redirect(rw, r, back, http.StatusSeeOther)
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// a plugin's page's files: a sandboxed frame's requests carry no
-		// cookie, and its token, which only a signed-in /api hands out,
-		// is the key (servePluginPage serves nothing without a good one)
-		if strings.HasPrefix(r.URL.Path, pluginPagePrefix) {
-			next.ServeHTTP(rw, r)
-			return
-		}
 		if q := r.URL.Query(); q.Has("k") {
 			if !same(q.Get("k")) {
 				http.Error(rw, "this link's key is not this magpie web's: use the link it printed when it started", http.StatusUnauthorized)

@@ -1,88 +1,54 @@
 package gui
 
 import (
-	"os"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/yetone/magpie/internal/agent"
-	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// The number Claude Desktop's menu says beside a Claude model it names
-// after its own catalog (#2578) is said on the Providers page too, on the
-// model's own chip, so a menu row there can be matched to its provider:
-// the number in the id Desktop is shown (gateway.DesktopID). No other
-// model carries one, nor one Desktop isn't shown, nor any model when
-// Claude Desktop isn't installed.
-func TestProviderModelsSayDesktopNumber(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", os.Getenv("HOME"))
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	p := provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1",
-		Models: []string{"claude-opus-5-5", "claude-sonnet-5-5", "m2", "claude-haiku-5"}}
-	if err := provider.Save(p); err != nil {
+func TestEnterpriseDesktopProviders(t *testing.T) {
+	sandboxHome(t)
+	forgetLastProviders()
+	t.Cleanup(forgetLastProviders)
+
+	t.Setenv("MAGPIE_EDITION", string(edition.Server))
+	if err := provider.Save(provider.Provider{ID: "legacy", Name: "Legacy", Chat: "http://127.0.0.1:1/v1", Off: true}); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"relay/claude-opus-5-5", "relay/m2", "relay/claude-haiku-5"} {
-		if err := provider.SetModelEfforts(id, []string{"low", "high"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := provider.SetHiddenModels("claude-desktop", []string{"relay/claude-haiku-5"}); err != nil {
+	keepProviders(providersState())
+
+	t.Setenv("MAGPIE_EDITION", string(edition.Desktop))
+	if err := provider.Save(provider.Provider{ID: "office", Name: "Office", Preset: provider.RemoteMagpiePreset,
+		Chat: "http://127.0.0.1:1", Key: "employee-test-key", Off: true}); err != nil {
 		t.Fatal(err)
 	}
-	desktop, err := agent.Find("claude-desktop")
-	if err != nil {
-		t.Fatal(err)
+	h := Handler(nil, nil)
+	request := func(method, path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader("{}")))
+		return w
 	}
-	said := func(uses []agentUse) map[string]string {
-		out := map[string]string{}
-		for _, m := range providerInfo(p, uses).Models {
-			out[m.ID] = m.Desktop
-		}
-		return out
+	if w := request(http.MethodGet, "/api/providers?last=1"); w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "null" {
+		t.Fatalf("desktop used another edition's cached providers: %d %s", w.Code, w.Body)
 	}
-	// the number in the id Claude Desktop is shown the Opus model by
-	var opus string
-	for _, e := range provider.Catalog() {
-		if e.ID == "relay/claude-opus-5-5" {
-			id := gateway.DesktopID(e)
-			rest, cut := strings.CutPrefix(id, "magpie-")
-			n, _, ok := strings.Cut(rest, ".anthropic.claude-opus-5-5")
-			if !cut || !ok || n == "" {
-				t.Fatalf("Desktop is shown %s, want magpie-<n>.anthropic.claude-opus-5-5", id)
-			}
-			opus = n
-		}
+	w := request(http.MethodGet, "/api/providers")
+	var state providersJSON
+	if err := json.Unmarshal(w.Body.Bytes(), &state); w.Code != http.StatusOK || err != nil {
+		t.Fatalf("providers: %d %s", w.Code, w.Body)
 	}
-	got := said([]agentUse{{Agent: desktop}})
-	want := map[string]string{
-		"claude-opus-5-5": opus,
-		// its own id: Desktop names it "Sonnet 5.5", with no number
-		"claude-sonnet-5-5": "",
-		// mythos-magpie-<n>: Desktop names it by display_name, which
-		// says the provider
-		"m2": "",
-		// not shown to Claude Desktop
-		"claude-haiku-5": "",
+	if len(state.Presets) != 1 || state.Presets[0].ID != provider.RemoteMagpiePreset ||
+		len(state.Providers) != 1 || state.Providers[0].ID != "office" {
+		t.Fatalf("desktop providers: %+v, presets: %+v", state.Providers, state.Presets)
 	}
-	for id, w := range want {
-		if got[id] != w {
-			t.Errorf("%s: the page says desktop %q, want %q", id, got[id], w)
-		}
+	if len(state.Movable)+len(state.Unmoved)+len(state.Excluded)+len(state.OnPlugins) != 0 {
+		t.Fatalf("desktop exposed subscription metadata: %+v", state)
 	}
-	// Claude Desktop not installed, another agent is: no chip carries a
-	// number
-	codex, err := agent.Find("codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for id, n := range said([]agentUse{{Agent: codex}}) {
-		if n != "" {
-			t.Errorf("without Claude Desktop, %s says desktop %q", id, n)
-		}
+	if w := request(http.MethodPost, "/api/signin"); w.Code != http.StatusNotFound {
+		t.Fatalf("desktop sign-in route returned %d", w.Code)
 	}
 }

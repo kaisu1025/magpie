@@ -32,7 +32,7 @@ ifeq ($(shell go env GOOS),android)
   TAGS = nogui
 endif
 
-.PHONY: assets-pack build-release build cli install test test-ui app icons release release-cli release-windows release-linux clean dev dev-once
+.PHONY: assets-pack build-release build cli install test test-ui app enterprise-desktop icons release release-cli release-windows release-linux clean dev dev-once
 
 # A release build embeds the UI's files as one zip instead of the tree
 # (internal/gui/assets_packed.go): a Windows or Linux download is the raw
@@ -49,6 +49,12 @@ cli:
 
 build-release: assets-pack
 	go build -tags "$(TAGS) packedassets" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
+
+enterprise-desktop: assets-pack
+	@mkdir -p dist
+	go build -tags "$(TAGS) packedassets" -trimpath \
+		-ldflags="$(LDFLAGS) -X github.com/yetone/magpie/internal/edition.defaultMode=enterprise-desktop" \
+		-o dist/magpie-enterprise-desktop$(if $(filter Windows_NT,$(OS)),.exe) .
 
 install:
 	go install -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" .
@@ -67,10 +73,10 @@ test-ui:
 	node --test --test-concurrency=$(UI_TEST_CONCURRENCY) $(UI_TESTS)
 
 # macOS bundle: menu bar app with no Dock icon (LSUIElement).
-app: build-release
+app: enterprise-desktop
 	@rm -rf magpie.app
 	@mkdir -p magpie.app/Contents/MacOS magpie.app/Contents/Resources
-	@cp magpie magpie.app/Contents/MacOS/magpie
+	@cp dist/magpie-enterprise-desktop magpie.app/Contents/MacOS/magpie
 	@cp build/darwin/magpie.icns magpie.app/Contents/Resources/magpie.icns
 	@cp build/darwin/Assets.car magpie.app/Contents/Resources/Assets.car
 	@cp THIRD_PARTY_NOTICES magpie.app/Contents/Resources/THIRD_PARTY_NOTICES
@@ -157,9 +163,9 @@ DEV_BACKEND ?= 127.0.0.1:3428
 DEV_CONTROL ?= 127.0.0.1:3429
 dev:
 	@if command -v fswatch >/dev/null; then \
-	  MAGPIE_ADDR=$(DEV_ADDR) MAGPIE_DEV_UI=$(DEV_UI) MAGPIE_DEV_BACKEND=$(DEV_BACKEND) MAGPIE_DEV_CONTROL=$(DEV_CONTROL) build/dev.sh; \
+	  MAGPIE_EDITION=enterprise-desktop MAGPIE_ADDR=$(DEV_ADDR) MAGPIE_DEV_UI=$(DEV_UI) MAGPIE_DEV_BACKEND=$(DEV_BACKEND) MAGPIE_DEV_CONTROL=$(DEV_CONTROL) build/dev.sh; \
 	else $(MAKE) --no-print-directory dev-once; fi
 
 dev-once:
 	@go build -tags dev -o magpie-dev . && echo "  magpie-dev · UI from internal/gui/assets, reload on save · gateway $(DEV_ADDR)"
-	@MAGPIE_ADDR=$(DEV_ADDR) MAGPIE_DEV_UI=$(DEV_UI) ./magpie-dev app
+	@MAGPIE_EDITION=enterprise-desktop MAGPIE_ADDR=$(DEV_ADDR) MAGPIE_DEV_UI=$(DEV_UI) ./magpie-dev app

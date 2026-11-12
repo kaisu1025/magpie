@@ -176,6 +176,9 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	if _, sent := fields["codeFont"]; !sent || web {
 		in.CodeFont = cur.CodeFont
 	}
+	if _, sent := fields["sessionTerminal"]; !sent {
+		in.SessionTerminal = cur.SessionTerminal
+	}
 	// and pages from before it do not send how often a refusal is asked
 	// again, which null sets back to every one left
 	if _, sent := fields["refusalRetries"]; !sent {

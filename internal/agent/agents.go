@@ -18,6 +18,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
@@ -219,6 +220,9 @@ func ClientsIn(all []*Agent) []*Agent {
 // All returns every agent magpie knows about, detected or not: its own,
 // then those plugins add.
 func All() []*Agent {
+	if edition.Current() == edition.Server {
+		return nil
+	}
 	home, cfg := homes()
 	own := builtins(home, cfg)
 	return append(own, pluggedAgents(home, own, nil)...)
@@ -243,6 +247,9 @@ func builtins(home, cfg string) []*Agent {
 // too, and the moves came before WSL agents. A wsl.exe that hangs held each
 // command 20s, its two listings' timeouts.
 func local() []*Agent {
+	if edition.Current() == edition.Server {
+		return nil
+	}
 	home, cfg := homes()
 	own := onMachine(home, cfg)
 	return append(own, pluggedAgents(home, own, nil)...)

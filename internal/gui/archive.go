@@ -11,24 +11,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// archiveStore is the bucket a call is read back from: sync's S3 one, or
-// a test's.
+// archiveStore reads requests saved to the local archive.
 type archiveStore interface {
 	Open(ctx context.Context, name string) (io.ReadCloser, int64, error)
 }
 
-var archiveBucket = func() (archiveStore, bool) {
-	b, ok := davsync.S3Bucket()
-	return b, ok
-}
-
-// localArchive is the archive on this computer, kept while sync has no S3
-// bucket (gateway/archive_local.go).
+// localArchive is the request archive on this computer.
 var localArchive = func() archiveStore { return gateway.LocalArchive() }
 
 // archivePreviewBody is the most of a body the page is sent to show; a
@@ -85,26 +77,9 @@ func openArchive(r *http.Request) (io.ReadCloser, int64, string, error) {
 		}
 		return body, size, date + "-" + id, nil
 	}
-	b, ok := archiveBucket()
-	if !ok {
-		return nil, 0, "", errors.New("Not in the archive on this computer: it is saved just after the call, the oldest are removed past the archive's size, or the save failed (magpie's log says why)")
-	}
-	body, size, err := b.Open(r.Context(), name)
-	if errors.Is(err, davsync.ErrNoObject) {
-		return nil, 0, "", errors.New("Not in the archive yet: it is uploaded just after the call, or the upload failed (magpie's log says why)")
-	}
-	if err != nil {
-		return nil, 0, "", err
-	}
-	return body, size, date + "-" + id, nil
+	return nil, 0, "", errors.New("Not in the archive on this computer: it is saved just after the call, the oldest are removed past the archive's size, or the save failed (magpie's log says why)")
 }
 
-// archiveRoutes are the request archive: its switch on the Usage page, a
-// call read back from this computer or the bucket by its date and id, for
-// the Usage and Routing pages, and its file, downloaded whole
-// (gateway/archive.go). With sync to an S3 bucket the switch is
-// RequestArchive, which sync carries to every computer; with none it is
-// RequestArchiveLocal, this computer's own, and calls are kept on its disk.
 func archiveRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/settings/archive", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ On bool }
@@ -113,11 +88,7 @@ func archiveRoutes(mux *http.ServeMux) {
 			return
 		}
 		s := settings.Load()
-		if _, ok := davsync.S3Bucket(); ok {
-			s.RequestArchive = in.On
-		} else {
-			s.RequestArchiveLocal = in.On
-		}
+		s.RequestArchiveLocal = in.On
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
@@ -229,12 +200,7 @@ type archiveJSON struct {
 
 func archiveState() archiveJSON {
 	s := settings.Load()
-	var a archiveJSON
-	if b, ok := davsync.S3Bucket(); ok {
-		a.On, a.Bucket = s.RequestArchive, b.Where()
-	} else {
-		a.On, a.Folder, a.Cap = s.RequestArchiveLocal, tilde(gateway.LocalArchive().Dir), gateway.LocalArchiveCap()
-	}
+	a := archiveJSON{On: s.RequestArchiveLocal, Folder: tilde(gateway.LocalArchive().Dir), Cap: gateway.LocalArchiveCap()}
 	if a.On {
 		a.Error, _ = gateway.ArchiveError()
 	}

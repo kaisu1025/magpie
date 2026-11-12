@@ -20,7 +20,6 @@ import (
 
 	"github.com/yetone/magpie/internal/applog"
 	"github.com/yetone/magpie/internal/daemon"
-	"github.com/yetone/magpie/internal/tui"
 )
 
 const logUsage = `usage: magpie log [--path] [-n N] [-f]
@@ -87,9 +86,6 @@ func logsHere(path string) string {
 	}
 	if st, err := daemon.Get(); err == nil && st.Installed && st.Logs != "" {
 		fmt.Fprintf(&b, "%s\n  magpie serve as a service (magpie daemon)\n", st.Logs)
-	}
-	if bg := tui.BackgroundLog(); exists(bg) {
-		fmt.Fprintf(&b, "%s\n  magpie serve left running by magpie tui as it quit\n", bg)
 	}
 	return b.String()
 }

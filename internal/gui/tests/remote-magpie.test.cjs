@@ -36,14 +36,21 @@ const providers = [{ id: "openrouter", name: "OpenRouter", icon: "openai", prese
     libraryMCP: true, deciders: ["judge/custom-a", "judge/custom-b"], models: [{ id: "lib/m1", name: "Chat", on: true }, { id: "judge/custom-a", name: "custom-a · judge", on: false }, { id: "judge/custom-b", name: "custom-b · judge", on: false }], agents: [], key: { set: true, masked: "sk-…ab12" } },
 ];
 
-function server(lang, saves) {
+function server(lang, saves, edition) {
+  const desktop = edition === "enterprise-desktop";
+  const state = desktop ? {
+    providers: [],
+    presets: presets.filter((p) => p.id === "remote-magpie"),
+    excluded: [{ agent: "claude", provider: "claude", agentName: "Claude", quiet: true }],
+    unmoved: [{ id: "cursor", name: "Cursor" }],
+  } : { providers, presets, excluded: [] };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:false};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang, theme: "light", web: false, edition })};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
-    if (url.pathname === "/api/providers") return json({ providers, presets, excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json({ ...state, gateway: { running: true, window: true } });
     if (url.pathname === "/api/provider/save") {
       saves.push(route.request().postDataJSON());
       return json({ providers, presets, excluded: [], gateway: { running: true, window: true } });
@@ -74,6 +81,36 @@ const H = {
   en: { remote: ["Another computer's magpie", "shared on its network"], local: "On this machine", relays: "Relays", finds: ["remote", "Magpie"] },
   zh: { remote: ["另一台电脑上的 magpie", "在它的局域网上共享"], local: "本机", relays: "中转", finds: ["remote", "magpie", "远程"] },
 };
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": enterprise desktop offers only Remote magpie", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const lang of ["en", "zh"]) {
+      const page = await browser.newPage({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(10000);
+      const errors = [];
+      const saves = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/*", server(lang, saves, "enterprise-desktop"));
+      await page.goto("http://magpie.test/?view=providers");
+      const tiles = page.locator("#addSheet .tile");
+      await tiles.getByText("Remote magpie", { exact: true }).waitFor();
+      assert.deepEqual(await tiles.locator(".n").allTextContents(), ["Remote magpie"]);
+      assert.equal(await page.locator("#addSheet input, #addSheet .custom, #movable .deprecation, #excluded .excluded, #pvMask").count(), 0);
+      await tiles.first().click();
+      const editor = page.locator(".editor.new");
+      await editor.locator("input.endpoint").fill("http://127.0.0.1:13425");
+      await editor.locator("input[type=password]").first().fill("employee-test-key");
+      await editor.locator(".bar button.primary").click();
+      assert.equal(saves.length, 1);
+      assert.equal(saves[0].preset, "remote-magpie");
+      assert.equal(saves[0].chat, "http://127.0.0.1:13425");
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+  });
+}
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": Remote magpie has its own heading in the add sheet", async (t) => {

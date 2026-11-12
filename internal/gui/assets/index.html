@@ -69,8 +69,6 @@
   <nav class="seg" id="nav" aria-label="Main navigation" data-ta style="--wails-draggable:no-drag">
     <span class="nav-gl" data-t>Work</span>
     <button data-view="agents" class="on" aria-current="page"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4-4 4M10 14h6"/></g></svg><span data-t>Agents</span></button>
-    <button data-view="sessions" data-feature="sessions"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h12v8H9l-4 3v-3H4z"/></g></svg><span data-t>Sessions</span></button>
-    <button data-view="library" data-feature="library"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h9v13H5a1.5 1.5 0 0 1 0-3h9"/></g></svg><span data-t>Library</span></button>
     <span class="nav-gl" data-t>Models</span>
     <button data-view="providers"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M10 10h7M14 10v3M16.5 10v2"/></g></svg><span data-t>Providers</span></button>
     <button data-view="routing" data-feature="routing"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h5l4-5h5M8 10l4 5h5M14.5 3l2.5 2-2.5 2M14.5 13l2.5 2-2.5 2"/></g></svg><span data-t>Routing</span></button>
@@ -80,7 +78,6 @@
     <button data-view="usage" data-feature="usage"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V9M8 16V5M12 16v-5M16 16V7"/></g></svg><span data-t>Usage</span></button>
     <button data-view="masking" data-feature="redact"><svg class="nav-ic" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.8 13 3.6v4.1c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.6Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span data-t>Masking</span></button>
     <span class="nav-gl" data-t>Extend</span>
-    <button data-view="plugins"><svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5h4v2.5a1.5 1.5 0 0 0 3 0V3.5h1.5v13H4v-4h2.5a1.5 1.5 0 0 0 0-3H4v-6z"/></g></svg><span data-t>Plugins</span></button>
   </nav>
   <div class="actions" style="--wails-draggable:no-drag">
     <span class="update-wrap">
@@ -152,18 +149,15 @@
 
 
 
-<main class="view" id="view-plugins" hidden></main>
 
 <main class="view" id="view-settings" hidden>
   <div class="row-head set-head"><div class="warm-tabs set-tabs" id="setTabs" role="tablist" aria-label="Settings">
     <button type="button" role="tab" id="setTab-general" data-set="general" aria-controls="setPage-general" data-t>General</button>
-    <button type="button" role="tab" id="setTab-usage" data-set="usage" aria-controls="setPage-usage" data-t>Allowances</button>
+    <button type="button" role="tab" id="setTab-usage" data-setting-scope="server" data-set="usage" aria-controls="setPage-usage" data-t>Allowances</button>
     <button type="button" role="tab" id="setTab-network" data-set="network" aria-controls="setPage-network" data-t>Network and sharing</button>
-    <button type="button" role="tab" id="setTab-models" data-set="models" aria-controls="setPage-models" data-t>Models</button>
-    <button type="button" role="tab" id="setTab-privacy" data-set="privacy" aria-controls="setPage-privacy" data-t>Privacy</button>
-    <button type="button" role="tab" id="setTab-otel" data-set="otel" aria-controls="setPage-otel" data-feature="otel" data-t>Observability</button>
-    <button type="button" role="tab" id="setTab-sync" data-set="sync" aria-controls="setPage-sync" data-t>Sync and backup</button>
-    <button type="button" role="tab" id="setTab-plugins" data-set="plugins" aria-controls="setPage-plugins" data-t hidden>Plugins</button>
+    <button type="button" role="tab" id="setTab-models" data-setting-scope="server" data-set="models" aria-controls="setPage-models" data-t>Models</button>
+    <button type="button" role="tab" id="setTab-privacy" data-setting-scope="server" data-set="privacy" aria-controls="setPage-privacy" data-t>Privacy</button>
+    <button type="button" role="tab" id="setTab-plugins" data-setting-scope="legacy" data-set="plugins" aria-controls="setPage-plugins" data-t hidden>Plugins</button>
     <button type="button" role="tab" id="setTab-about" data-set="about" aria-controls="setPage-about" data-t>About</button>
   </div><input class="sess-filter set-q" id="setQ" type="search" spellcheck="false" autocomplete="off" placeholder="Find a setting" aria-label="Find a setting" data-tp></div>
   <p class="set-none" id="setNone" role="status" hidden></p>
@@ -181,7 +175,7 @@
         <div class="who"><div class="name" data-t>Reduce motion</div></div>
         <div id="reduceMotionSegs"></div>
       </div>
-      <div class="row pref" id="birdRow">
+      <div class="row pref" id="birdRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Loading bird</div></div>
         <div id="birdSegs"></div>
       </div>
@@ -189,15 +183,15 @@
         <div class="who"><div class="name" data-t>Language</div></div>
         <button type="button" id="langPick" class="sess-pick pref-pick" aria-label="Language" aria-haspopup="menu" aria-expanded="false"></button>
       </div>
-      <div class="row pref" id="gatewayModeRow" hidden>
+      <div class="row pref" id="gatewayModeRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Gateway mode</div><div class="sub" id="gatewayModeSub"></div></div>
         <div id="gatewayModeSegs"></div>
       </div>
-      <div class="row pref app-only" id="textSizeRow">
+      <div class="row pref app-only" id="textSizeRow" data-setting-scope="desktop">
         <div class="who"><div class="name" data-t>Text size</div></div>
         <div id="textSizeSegs"></div>
       </div>
-      <div class="row pref font-row" id="uiFontRow" hidden>
+      <div class="row pref font-row" id="uiFontRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Interface font</div><div class="sub font-note" hidden></div></div>
         <div class="font-controls">
           <button type="button" class="proto pick font-family" aria-haspopup="menu" aria-expanded="false"></button>
@@ -205,7 +199,7 @@
           <div class="font-preview">Aa 0123 · 中文</div>
         </div>
       </div>
-      <div class="row pref font-row" id="codeFontRow" hidden>
+      <div class="row pref font-row" id="codeFontRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Code font</div><div class="sub font-note" hidden></div></div>
         <div class="font-controls">
           <button type="button" class="proto pick font-family" aria-haspopup="menu" aria-expanded="false"></button>
@@ -213,89 +207,85 @@
           <div class="font-preview">Aa 0123 · 中文</div>
         </div>
       </div>
-      <div class="row pref app-only">
+      <div class="row pref app-only" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Click the tray icon to</div></div>
         <div id="traySegs"></div>
       </div>
-      <div class="row pref app-only" id="panelKeyRow">
+      <div class="row pref app-only" id="panelKeyRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Quick panel shortcut</div><div class="sub" hidden></div></div>
         <div id="panelKey"></div>
       </div>
-      <div class="row pref" id="barIconRow" hidden>
+      <div class="row pref" id="barIconRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Bar icon</div><div class="sub" data-t>magpie’s icon beside Omarchy’s own in the bar; right-click opens the window</div></div>
         <div id="barIconSegs"></div>
       </div>
-      <div class="row pref">
+      <div class="row pref" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Provider in model names</div></div>
         <div id="plainNamesSegs"></div>
       </div>
       <!-- Codex's and Claude Code's own settings are on the Agents page (AGENT_PREFS); while searching, a row here says where -->
-      <div id="agentPrefLinks"></div>
-      <div class="row pref app-only" id="loginRow">
+      <div id="agentPrefLinks" data-setting-scope="legacy"></div>
+      <div class="row pref app-only" id="loginRow" data-setting-scope="desktop">
         <div class="who"><div class="name" data-t>Open at login</div></div>
         <div id="loginSegs"></div>
       </div>
-      <div class="row pref app-only" id="gatewayPauseRow">
+      <div class="row pref app-only" id="gatewayPauseRow" data-setting-scope="desktop">
         <div class="who"><div class="name" data-t>Gateway</div><div class="sub" data-t>Paused, agents are disconnected and use their own settings</div></div>
         <div id="gatewayPauseSegs"></div>
       </div>
-      <div class="row pref app-only" id="quitAskRow">
+      <div class="row pref app-only" id="quitAskRow" data-setting-scope="desktop">
         <div class="who"><div class="name" data-t>Ask before quitting</div><div class="sub" data-t>While agents go through magpie, Quit names them and asks first</div></div>
         <div id="quitAskSegs"></div>
       </div>
-      <div class="row pref" id="dockRow" hidden>
+      <div class="row pref" id="dockRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Show in Dock</div></div>
         <div id="dockSegs"></div>
       </div>
-      <div class="row pref" id="lightweightRow" hidden>
+      <div class="row pref" id="lightweightRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Lightweight mode</div><div class="sub" data-t>A closed window frees about 100 MB after a minute; the gateway and tasks keep running, only the page reloads</div></div>
         <div id="lightweightSegs"></div>
       </div>
-      <div class="row pref" id="keepAwakeRow">
+      <div class="row pref" id="keepAwakeRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Prevent sleep</div><div class="sub" data-t>Keeps this computer awake while magpie runs tasks</div></div>
         <div id="keepAwakeSegs"></div>
       </div>
-      <div class="row pref" id="wslAgentsRow" hidden>
+      <div class="row pref" id="wslAgentsRow" data-setting-scope="desktop" hidden>
         <div class="who"><div class="name" data-t>Detect agents in WSL</div><div class="sub" data-t>Looks in running WSL distros for agents to set up, their sessions and Claude Code; off, WSL is never asked anything and the agents found there are no longer shown</div></div>
         <div id="wslAgentsSegs"></div>
       </div>
-      <div class="row pref" id="sessionTerminalRow" data-feature="sessions" hidden>
-        <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>The terminal a session opens in</div></div>
-        <button type="button" id="sessionTerminalSelect" class="sess-pick session-terminal-select" aria-label="Session terminal" aria-haspopup="menu" aria-expanded="false" data-ta></button>
-      </div>
     </div>
   </section>
-  <section class="set-page" id="setPage-usage" role="tabpanel" aria-labelledby="setTab-usage">
+  <section class="set-page" id="setPage-usage" data-setting-scope="server" role="tabpanel" aria-labelledby="setTab-usage">
     <div class="list prefs">
-      <div class="row pref app-only" id="trayUsageRow">
+      <div class="row pref app-only" id="trayUsageRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Allowances in the menu bar</div><div class="sub" id="trayUsageSub"></div></div>
         <div id="trayUsagePick"></div>
       </div>
-      <div class="row pref" id="trayWindowsRow" hidden>
+      <div class="row pref" id="trayWindowsRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Menu bar windows</div><div class="sub" data-t>Which of a subscription's windows its card shows, such as 5 hours or 7 days alone; every window unless you pick, and every window again when those picked are gone</div></div>
         <div id="trayWindowsPick" class="tray-windows"></div>
       </div>
-      <div class="row pref" id="trayEveryRow" hidden>
+      <div class="row pref" id="trayEveryRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Menu bar refresh</div><div class="sub" data-t>How often the allowances beside the icon are asked for again</div></div>
         <div id="trayEverySegs"></div>
       </div>
-      <div class="row pref" id="trayLogosRow" hidden>
+      <div class="row pref" id="trayLogosRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Menu bar logos</div><div class="sub" data-t>Each subscription's logo before its numbers; off, the numbers alone with a thin line between subscriptions</div></div>
         <div id="trayLogosSegs"></div>
       </div>
-      <div class="row pref" id="trayBirdRow" hidden>
+      <div class="row pref" id="trayBirdRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Menu bar magpie icon</div><div class="sub" data-t>magpie's icon before the allowances; off, the allowances alone, and a click on one still opens the panel</div></div>
         <div id="trayBirdSegs"></div>
       </div>
-      <div class="row pref" id="trayPaceRow" hidden>
+      <div class="row pref" id="trayPaceRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Menu bar pace</div><div class="sub" data-t>Each window's Pace number beside its figure, as on the Usage page: +12% is 12% more of the window used than an even pace would have used by now, −8% that much less</div></div>
         <div id="trayPaceSegs"></div>
       </div>
-      <div class="row pref app-only" id="trayCostRow">
+      <div class="row pref app-only" id="trayCostRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Menu bar cost</div><div class="sub" data-t>What magpie's requests cost, beside their tokens in the menu bar and its tooltip; off, the tokens alone</div></div>
         <div id="trayCostSegs"></div>
       </div>
-      <div class="row pref" id="trayNumberRow" hidden>
+      <div class="row pref" id="trayNumberRow" data-setting-scope="legacy" hidden>
         <div class="who"><div class="name" data-t>Tray icon number</div><div class="sub" data-t>The first allowance's figure as magpie's tray icon, used or left as Allowance display has it, every one when pointing at it; off, magpie's icon</div></div>
         <div id="trayNumberSegs"></div>
       </div>
@@ -315,10 +305,10 @@
         <div class="who"><div class="name" data-t>Number units</div><div class="sub" data-t>How a large count of tokens or requests is shortened on the Usage page and the panel</div></div>
         <div id="unitsSegs"></div>
       </div>
-      <div id="provPrefLinks"></div>
+      <div id="provPrefLinks" data-setting-scope="legacy"></div>
     </div>
-    <div class="row-head" id="alertHead"><span class="label" data-t>Alerts</span></div>
-    <div class="list prefs" id="alertList">
+    <div class="row-head" id="alertHead" data-setting-scope="legacy"><span class="label" data-t>Alerts</span></div>
+    <div class="list prefs" id="alertList" data-setting-scope="legacy">
       <div class="row pref" id="usageAlertRow">
         <div class="who"><div class="name" data-t>Allowance alert</div><div class="sub" id="usageAlertSub"></div></div>
         <div id="usageAlertSegs" class="warm-at"></div>
@@ -351,40 +341,34 @@
         <div class="who"><div class="name" data-t>Proxy</div><div class="sub" id="proxySub"></div></div>
         <div id="proxySegs" class="proxy-segs"></div>
       </div>
-      <div class="row pref" id="pluginProxyRow">
+      <div class="row pref" id="pluginProxyRow" data-setting-scope="legacy">
         <div class="who"><div class="name" data-t>Plugin downloads</div><div class="sub" id="pluginProxySub"></div></div>
         <div id="pluginProxySegs" class="proxy-segs"></div>
       </div>
     </div>
     <div class="row-head"><span class="label" data-t>Proxies</span></div>
     <div class="list prefs" id="proxiesList"></div>
-    <div class="row-head"><span class="label">GitHub</span></div>
-    <div class="list prefs" id="githubList"></div>
+    <div class="row-head" data-setting-scope="legacy"><span class="label">GitHub</span></div>
+    <div class="list prefs" id="githubList" data-setting-scope="legacy"></div>
     <div class="row-head"><span class="label" data-t>Gateway</span></div>
     <div class="list prefs" id="portList"></div>
-    <div class="list prefs">
+    <div class="list prefs" data-setting-scope="server">
       <div class="row pref" id="bareIdsRow">
         <div class="who"><div class="name" data-t>Model ids without the provider</div><div class="sub" data-t>The gateway’s model list also names each model by its own id, as gpt-5.6-sol beside codex/gpt-5.6-sol, for apps moved from another proxy. One that several providers serve goes to them in the Providers order</div></div>
         <div id="bareIdsSegs"></div>
       </div>
     </div>
-    <div class="row-head"><span class="label" data-t>Local network</span></div>
-    <div class="list prefs" id="lanList"></div>
-    <div class="list prefs" id="allowList"></div>
-    <div class="list prefs" id="mtlsList"></div>
-    <div class="list prefs" id="httpsList"></div>
-    <div class="row-head"><span class="label" data-t>Web pages</span></div>
-    <div class="list prefs" id="corsList"></div>
-    <div class="row-head" id="webPageHead"><span class="label" data-t>Browser access</span></div>
-    <div class="list prefs" id="webPageList"></div>
-    <div class="row-head" id="remoteHead"><span class="label" data-t>Another magpie</span></div>
-    <div class="list prefs" id="remoteList"></div>
+    <div class="row-head" data-setting-scope="server"><span class="label" data-t>Local network</span></div>
+    <div class="list prefs" id="lanList" data-setting-scope="server"></div>
+    <div class="list prefs" id="allowList" data-setting-scope="server"></div>
+    <div class="list prefs" id="mtlsList" data-setting-scope="server"></div>
+    <div class="list prefs" id="httpsList" data-setting-scope="server"></div>
+    <div class="row-head" data-setting-scope="server"><span class="label" data-t>Web pages</span></div>
+    <div class="list prefs" id="corsList" data-setting-scope="server"></div>
   </section>
-  <section class="set-page" id="setPage-models" role="tabpanel" aria-labelledby="setTab-models">
-    <div class="row-head"><span class="label" data-t>Images</span></div>
-    <div class="list prefs" id="imagesList"></div>
-    <div class="row-head"><span class="label" data-t>Web search</span></div>
-    <div class="list prefs" id="searchList"></div>
+  <section class="set-page" id="setPage-models" data-setting-scope="server" role="tabpanel" aria-labelledby="setTab-models">
+    <div class="row-head" data-setting-scope="legacy"><span class="label" data-t>Images</span></div>
+    <div class="list prefs" id="imagesList" data-setting-scope="legacy"></div>
     <div class="row-head"><span class="label" data-t>Replies</span></div>
     <div class="list prefs" id="replyList"></div>
     <div class="row-head"><span class="label" data-t>Routing</span></div>
@@ -401,7 +385,7 @@
     <div class="row-head"><span class="label" data-t>Disabled models</span></div>
     <div class="list prefs" id="disabledModelsList"></div>
   </section>
-  <section class="set-page" id="setPage-privacy" role="tabpanel" aria-labelledby="setTab-privacy">
+  <section class="set-page" id="setPage-privacy" data-setting-scope="server" role="tabpanel" aria-labelledby="setTab-privacy">
     <div class="row-head"><span class="label" data-t>How it's found</span></div>
     <div class="list prefs" id="findList"></div>
     <div class="row-head"><span class="label" data-t>What to mask</span></div>
@@ -410,22 +394,14 @@
     <div class="list prefs" id="maskActList"></div>
     <div class="row-head"><span class="label" data-t>Try it</span></div>
     <div class="list prefs" id="maskTryList"></div>
-    <div class="row-head"><span class="label" data-t>Sharing</span></div>
-    <div class="list prefs" id="shareList"></div>
-    <div class="row-head"><span class="label" data-t>Agents' sign-ins</span></div>
-    <div class="list prefs" id="discoveryList"></div>
-    <div class="row-head"><span class="label" data-t>Sign-in pages</span></div>
-    <div class="list prefs" id="signInOpenList"></div>
-    <div class="row-head"><span class="label" data-t>Agents' session history</span></div>
-    <div class="list prefs" id="sessionReadsList"></div>
+    <div class="row-head" data-setting-scope="legacy"><span class="label" data-t>Sharing</span></div>
+    <div class="list prefs" id="shareList" data-setting-scope="legacy"></div>
+    <div class="row-head" data-setting-scope="legacy"><span class="label" data-t>Agents' sign-ins</span></div>
+    <div class="list prefs" id="discoveryList" data-setting-scope="legacy"></div>
+    <div class="row-head" data-setting-scope="legacy"><span class="label" data-t>Sign-in pages</span></div>
+    <div class="list prefs" id="signInOpenList" data-setting-scope="legacy"></div>
   </section>
-  <section class="set-page" id="setPage-otel" role="tabpanel" aria-labelledby="setTab-otel" data-feature="otel">
-    <div id="otelList"></div>
-  </section>
-  <section class="set-page" id="setPage-sync" role="tabpanel" aria-labelledby="setTab-sync">
-    <div class="list prefs" id="syncList"></div>
-  </section>
-  <section class="set-page" id="setPage-plugins" role="tabpanel" aria-labelledby="setTab-plugins">
+  <section class="set-page" id="setPage-plugins" data-setting-scope="legacy" role="tabpanel" aria-labelledby="setTab-plugins">
     <div class="plugin-slot" data-slot="settings" hidden></div>
   </section>
   <section class="set-page" id="setPage-about" role="tabpanel" aria-labelledby="setTab-about">
@@ -577,30 +553,20 @@
 <!-- the built-in plugins' own scripts (pluginrt.Manifest.Client) -->
 <script src="plugins/gateway/keys.js"></script>
 <script src="plugins/gateway/client.js"></script>
-<script src="plugins/sessions/i18n.js"></script>
-<script src="plugins/sessions/client.js"></script>
-<script src="plugins/library/i18n.js"></script>
-<script src="plugins/library/client.js"></script>
 <script src="plugins/routing/i18n.js"></script>
 <script src="plugins/routing/client.js"></script>
 <script src="plugins/usage/i18n.js"></script>
 <script src="plugins/usage/client.js"></script>
 <script src="plugins/redact/i18n.js"></script>
 <script src="plugins/redact/client.js"></script>
-<script src="plugins/otel/i18n.js"></script>
 <script src="purposes.js"></script>
 <script src="app.js"></script>
-<script src="plugins.js"></script>
-<script src="pluginpages.js"></script>
 <script src="context.js"></script>
 <script src="plugins/usage/page.js"></script>
 <script src="plugins/redact/page.js"></script>
 <script src="plugins/redact/demo.js"></script>
-<script src="plugins/otel/page.js"></script>
 <script src="plugins/gateway/settings.js"></script>
-<script src="plugins/search/settings.js"></script>
 <script src="plugins/routing/settings.js"></script>
-<script src="plugins/sessions/settings.js"></script>
 <script src="plugins/redact/settings.js"></script>
 <script src="start.js"></script>
 </body>

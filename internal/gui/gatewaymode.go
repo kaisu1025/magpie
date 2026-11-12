@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -41,6 +42,9 @@ var webPage atomic.Bool
 func gatewayMode(web bool) (bool, string) {
 	if !web {
 		return false, ""
+	}
+	if edition.Current() == edition.Server {
+		return true, "edition"
 	}
 	switch m := settings.Load().GatewayMode; m {
 	case "on", "off":
@@ -96,6 +100,9 @@ func gatewayModeRoutes(mux *http.ServeMux) {
 // (agentsHereKept) rather than gatewayMode's own. When its answer turns,
 // what was read under the other answer is dropped (ownTurned).
 func ownSessionsOff() bool {
+	if edition.Enterprise() {
+		return true
+	}
 	on := false
 	if webPage.Load() {
 		switch settings.Shared().GatewayMode {

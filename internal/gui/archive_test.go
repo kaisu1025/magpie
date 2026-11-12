@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -27,7 +26,7 @@ type fakeArchive struct {
 func (f fakeArchive) Open(_ context.Context, name string) (io.ReadCloser, int64, error) {
 	b, ok := f.objs[name]
 	if !ok {
-		return nil, 0, davsync.ErrNoObject
+		return nil, 0, gateway.ErrNotArchived
 	}
 	if f.size != 0 {
 		return io.NopCloser(bytes.NewReader(b)), f.size, nil
@@ -43,9 +42,9 @@ func archiveHome(t *testing.T, f fakeArchive) http.Handler {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	os.MkdirAll(filepath.Join(h, "Downloads"), 0o700)
-	was := archiveBucket
-	archiveBucket = func() (archiveStore, bool) { return f, true }
-	t.Cleanup(func() { archiveBucket = was })
+	was := localArchive
+	localArchive = func() archiveStore { return f }
+	t.Cleanup(func() { localArchive = was })
 	return Handler(nil, nil)
 }
 
@@ -153,7 +152,7 @@ func TestArchiveOldPreview(t *testing.T) {
 // (CyberCaius on Discord).
 func TestArchiveSwitchKeepsOnThisComputer(t *testing.T) {
 	h := archiveHome(t, fakeArchive{objs: map[string][]byte{}})
-	archiveBucket = func() (archiveStore, bool) { return nil, false }
+	localArchive = func() archiveStore { return gateway.LocalArchive() }
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/settings/archive", strings.NewReader(`{"on":true}`)))
 	var a archiveJSON

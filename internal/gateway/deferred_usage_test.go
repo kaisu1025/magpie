@@ -1,13 +1,8 @@
 package gateway
 
 import (
-	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -119,7 +114,7 @@ func TestTranslatedReplyTellsOwnUsageBillsDeferred(t *testing.T) {
 }
 
 // Through the whole gateway: a client is told the request's own usage and
-// never magpie_deferred's, while the ledger and the OTel span carry both.
+// never magpie_deferred's, while the ledger carries both.
 // own 0 is a step whose event showed late: only its deferred is in the reply.
 func TestDeferredUsageThroughTheGateway(t *testing.T) {
 	const deferred = `"magpie_deferred":{"prompt_tokens":181270,"completion_tokens":1913,"cached_tokens":177533,"cache_write_tokens":3735}`
@@ -144,39 +139,15 @@ func TestDeferredUsageThroughTheGateway(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			setup(t, provider.Chat, &fake{ctype: c.ctype, reply: c.reply})
-			received := make(chan string, 1)
-			collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				b, _ := io.ReadAll(r.Body)
-				received <- string(b)
-				io.WriteString(w, `{}`)
-			}))
-			defer collector.Close()
-			t.Setenv("MAGPIE_OTEL_ENABLED", "true")
-			t.Setenv("MAGPIE_OTEL_ENDPOINT", collector.URL)
-			t.Setenv("MAGPIE_OTEL_HEADERS", "")
-			t.Setenv("MAGPIE_OTEL_METRICS", "false")
-			fastOTel(t)
-			stop := startOTel()
-			t.Cleanup(stop)
 			code, body := post(t, c.path, c.request)
 			if code != 200 {
 				t.Fatalf("gateway: %d %s", code, body)
 			}
-			stop()
 			if c.path == "/v1/messages" && strings.Contains(body, "magpie_deferred") {
 				t.Errorf("Claude Code was told magpie_deferred: %s", body)
 			}
 			if r := lastUsage(t); r.Input != c.in || r.Output != c.out || r.CacheRead != c.read || r.CacheWrite != c.write {
 				t.Errorf("ledger %+v", r)
-			}
-			select {
-			case exported := <-received:
-				// the span carries what the ledger does
-				if !strings.Contains(exported, fmt.Sprintf(`"intValue":"%d"`, c.out)) || !strings.Contains(exported, fmt.Sprintf(`"intValue":"%d"`, c.read)) {
-					t.Errorf("span: %s", exported)
-				}
-			case <-time.After(time.Second):
-				t.Error("gateway usage was not exported")
 			}
 		})
 	}

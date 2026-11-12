@@ -324,10 +324,20 @@ func mainView(q url.Values) string {
 			view += "&key=" + strconv.FormatInt(key, 10)
 		}
 	case "usage":
-		if tab := q.Get("tab"); tab == "requests" || tab == "usage" {
+		tab := q.Get("tab")
+		if tab == "requests" || tab == "usage" {
 			view += "&tab=" + tab
 		}
-		if card := q.Get("card"); q.Get("tab") == "usage" && card != "" {
+		if tab == "requests" {
+			switch period := q.Get("period"); period {
+			case "today", "7d", "30d", "all":
+				view += "&period=" + period
+			}
+			if day, err := time.Parse(time.DateOnly, q.Get("day")); err == nil {
+				view += "&day=" + day.Format(time.DateOnly)
+			}
+		}
+		if card := q.Get("card"); tab == "usage" && card != "" {
 			view += "&card=" + url.QueryEscape(card)
 		}
 		for _, k := range []string{"provider", "agent"} {

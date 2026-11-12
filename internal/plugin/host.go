@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
@@ -978,6 +979,9 @@ func get(ctx context.Context) (*host, error) {
 // getLocked requires hostMu. Gateway hooks bound both the lock wait and
 // startup with their request-hook budget.
 func getLocked(ctx context.Context) (*host, error) {
+	if edition.Enterprise() {
+		return nil, errors.New("community plugins are unavailable in the enterprise editions")
+	}
 	if hostStale.Swap(false) && current != nil {
 		go current.retire()
 		current = nil

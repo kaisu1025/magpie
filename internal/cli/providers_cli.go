@@ -19,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -1615,8 +1616,10 @@ func serve() error {
 	}()
 	// Codex's background app-server, restarted when it has the list from
 	// before a change and no codex session is on it
-	go agent.KeepCodexDaemonCurrent(context.Background())
-	go agent.KeepCodexRolloutsPortable(context.Background())
+	if edition.Current() != edition.Server {
+		go agent.KeepCodexDaemonCurrent(context.Background())
+		go agent.KeepCodexRolloutsPortable(context.Background())
+	}
 	public := advertisedURL()
 	fmt.Println(green.Render("●"), "magpie gateway on", bold.Render(gateway.URL()))
 	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")
@@ -1646,6 +1649,9 @@ func serve() error {
 	// (serve_follow.go)
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
+	if edition.Enterprise() {
+		return s.ListenAndServe(ctx)
+	}
 	follow := newServeFollow(s, stop)
 	if follow != nil {
 		gateway.SetRestarter(follow.answer)

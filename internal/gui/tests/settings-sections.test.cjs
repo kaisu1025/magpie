@@ -1,8 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The Settings page in parts (#471: one long scroll of nine sections and
 // some 45 rows, the rarely used ones screens away): a tab list at the top —
-// General, Allowances, Network and sharing, Models, Privacy, Observability, Sync
-// and backup, About — each tab showing its part's rows alone, so any section
+// General, Allowances, Network and sharing, Models, Privacy, About —
+// each tab showing its part's rows alone, so any section
 // is one click away once Settings is open. The part picked is kept in the
 // address (?view=settings&tab=…), so a reload lands on it, and remembered,
 // so the window opened again on Settings does too; a link with a tab opens
@@ -36,12 +36,13 @@ function settingsPayload(over) {
   };
 }
 
-function server(lang, posts, { web = false, size = 100 } = {}) {
-  let cur = settingsPayload({ lang, textSize: size });
+function server(lang, posts, { web = false, size = 100, edition } = {}) {
+  const gateway = edition === "enterprise-server";
+  let cur = settingsPayload({ lang, textSize: size, gatewayOn: gateway });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web},textSize:${size}};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang, theme: "light", web, textSize: size, edition, gateway })};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", textSize: size }, fx: cur.fx });
     if (url.pathname === "/api/settings") {
@@ -63,16 +64,58 @@ function server(lang, posts, { web = false, size = 100 } = {}) {
   };
 }
 
-const TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"];
+const TABS = ["general", "usage", "network", "models", "privacy", "about"];
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": settings match the enterprise edition", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const lang of ["en", "zh"]) {
+      for (const edition of ["enterprise-server", "enterprise-desktop"]) {
+        const desktop = edition === "enterprise-desktop";
+        const page = await browser.newPage({ viewport: { width: 860, height: 760 }, reducedMotion: "reduce" });
+        page.setDefaultTimeout(10000);
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.route("**/*", server(lang, [], { edition, web: !desktop }));
+        await page.addInitScript(() => localStorage.setItem("magpie.settingsTab", "plugins"));
+        await page.goto("http://magpie.test/?view=settings&tab=plugins");
+        await page.locator("#themeSegs .opt").first().waitFor();
+        assert.deepEqual(await page.locator("#setTabs [data-set]").evaluateAll((tabs) => tabs.map((tab) => tab.dataset.set)),
+          desktop ? ["general", "network", "about"] : TABS, edition);
+        assert.equal(await page.locator("#loginRow").count(), desktop ? 1 : 0);
+        assert.equal(await page.locator("#pluginProxyRow, #trayUsageRow, #imagesList, #discoveryList, #shareList").count(), 0);
+        await openPart(page, "network");
+        await page.locator("#portList input").waitFor();
+        assert.equal(await page.locator("#allowList").count(), desktop ? 0 : 1);
+        if (!desktop) {
+          await openPart(page, "usage");
+          await page.locator("#currencySegs button").first().waitFor();
+          await openPart(page, "models");
+          await page.locator("#contextCapVal input").waitFor();
+          await openPart(page, "privacy");
+          await page.locator("#redactList .row").first().waitFor();
+        }
+        await openPart(page, "about");
+        await page.locator("#about .row").first().waitFor();
+        assert.equal(await page.locator("#about :is(.update-auto-row, .update-channel-row, .whatsnew-row, .cli-row, #uninstallRow)").count(), 0);
+        await page.locator("#setQ").fill("Plugin downloads");
+        await page.locator("#setNone").waitFor();
+        assert.deepEqual(errors, [], edition + " " + lang);
+        await page.close();
+      }
+    }
+  });
+}
 const L = {
-  en: ["General", "Allowances", "Network and sharing", "Models", "Privacy", "Observability", "Sync and backup", "About"],
-  zh: ["常规", "额度", "网络与共享", "模型", "隐私", "可观测性", "同步与备份", "关于"],
+  en: ["General", "Allowances", "Network and sharing", "Models", "Privacy", "About"],
+  zh: ["常规", "额度", "网络与共享", "模型", "隐私", "关于"],
 };
 const LABEL = { en: "Settings", zh: "设置" };
 // what each part shows: an element of its own rows, drawn by the page
 const MARK = {
   general: "#themeSegs .opt", usage: "#currencySegs .opt", network: "#proxySegs", models: "#imagesList .row",
-  privacy: "#redactList .row", otel: "#otelList .row", sync: "#syncList .row", about: "#about .row",
+  privacy: "#redactList .row", about: "#about .row",
 };
 
 // the tab picked, the parts shown, the tab focused, and the address's tab
@@ -179,8 +222,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await page.locator("#setTabs [role=tab]").evaluateAll((bs) => bs.filter((b) => b.tabIndex === 0).map((b) => b.dataset.set)), ["privacy"]);
         await page.locator(":is(#setTab-privacy, .nav-s[data-of=setTab-privacy]):visible").focus();
         await page.keyboard.press("ArrowRight");
-        assert.deepEqual((await shown(page)).parts, ["otel"]);
-        assert.equal((await shown(page)).focus, "otel");
+        assert.deepEqual((await shown(page)).parts, ["about"]);
+        assert.equal((await shown(page)).focus, "about");
         await page.keyboard.press("End");
         assert.deepEqual((await shown(page)).parts, ["about"]);
         await page.keyboard.press("ArrowRight");
@@ -191,34 +234,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual((await shown(page)).parts, ["general"]);
         await page.keyboard.press("ArrowLeft");
         await page.keyboard.press("ArrowLeft");
-        assert.deepEqual((await shown(page)).on, ["sync"]);
+        assert.deepEqual((await shown(page)).on, ["privacy"]);
         assert.equal(await top(page), 0, "the keys move nothing");
 
         // a reload comes back to the part
         await page.reload();
-        await page.locator(MARK.sync).first().waitFor();
-        assert.deepEqual(await shown(page), { on: ["sync"], parts: ["sync"], focus: "", url: "settings/sync" });
+        await page.locator(MARK.privacy).first().waitFor();
+        assert.deepEqual(await shown(page), { on: ["privacy"], parts: ["privacy"], focus: "", url: "settings/privacy" });
 
         // another view leaves the tab out of the address; Settings again
         // brings it back
         await page.locator('#nav [data-view="usage"]').click();
         assert.equal(new URL(page.url()).searchParams.get("tab"), null);
         await page.locator("#prefs").click();
-        assert.deepEqual((await shown(page)).url, "settings/sync");
+        assert.deepEqual((await shown(page)).url, "settings/privacy");
 
         // the window opened again on Settings (no tab in the address): the
         // part last picked
         const again = await open(lang, [], { url: "/?view=settings", ctx: page.context() });
-        await again.locator(MARK.sync).first().waitFor();
-        assert.deepEqual((await shown(again)).parts, ["sync"]);
+        await again.locator(MARK.privacy).first().waitFor();
+        assert.deepEqual((await shown(again)).parts, ["privacy"]);
         // a link to a part opens on it, and it is remembered
-        const link = await open(lang, [], { url: "/?view=settings&tab=otel", ctx: page.context() });
-        await link.locator(MARK.otel).first().waitFor();
-        assert.deepEqual((await shown(link)).parts, ["otel"]);
+        const link = await open(lang, [], { url: "/?view=settings&tab=models", ctx: page.context() });
+        await link.locator(MARK.models).first().waitFor();
+        assert.deepEqual((await shown(link)).parts, ["models"]);
         // one not known: the part remembered
         const bad = await open(lang, [], { url: "/?view=settings&tab=nope", ctx: page.context() });
-        await bad.locator(MARK.otel).first().waitFor();
-        assert.deepEqual((await shown(bad)).parts, ["otel"]);
+        await bad.locator(MARK.models).first().waitFor();
+        assert.deepEqual((await shown(bad)).parts, ["models"]);
         assert.deepEqual([...page.errors, ...again.errors, ...link.errors, ...bad.errors], []);
       });
 

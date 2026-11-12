@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 )
 
@@ -37,6 +38,9 @@ func AccountDiscoveryOffIn(s Settings) bool {
 }
 
 func noAccountsEnv() bool {
+	if edition.Enterprise() {
+		return true
+	}
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("MAGPIE_NO_ACCOUNTS")))
 	return v != "" && v != "0" && v != "false"
 }
