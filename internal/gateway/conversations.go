@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/sessions"
@@ -29,6 +30,9 @@ func withGatewaySession(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	WhileServing = append(WhileServing, func(ctx context.Context) {
+		if edition.Enterprise() {
+			return
+		}
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
 		for {
@@ -59,6 +63,9 @@ func (w *conversationWriter) WriteHeader(status int) {
 // recordConversation wraps the client-facing path, outside middleware and
 // translation, so retries never become duplicate assistant replies.
 func recordConversation(w http.ResponseWriter, r *http.Request, proto provider.Protocol, body []byte) (http.ResponseWriter, func()) {
+	if edition.Enterprise() {
+		return w, func() {}
+	}
 	id := sessionOf(r.Header)
 	generation := sessions.GatewayRecordingGeneration()
 	if !settings.Shared().GatewayConversations || id == "" {

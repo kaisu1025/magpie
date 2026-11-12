@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -139,15 +138,7 @@ func openArchiveName(ctx context.Context, name string) (io.ReadCloser, int64, er
 	if body, size, err := localArchive().Open(ctx, name); !errors.Is(err, gateway.ErrNotArchived) {
 		return body, size, err
 	}
-	b, ok := archiveBucket()
-	if !ok {
-		return nil, 0, errNotArchived
-	}
-	body, size, err := b.Open(ctx, name)
-	if errors.Is(err, davsync.ErrNoObject) {
-		return nil, 0, errNotArchived
-	}
-	return body, size, err
+	return nil, 0, errNotArchived
 }
 
 // archiveGone is the ctxGone of an error reading a route's archive; ""

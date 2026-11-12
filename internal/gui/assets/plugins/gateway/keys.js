@@ -343,7 +343,7 @@ function gatewayKeyMore(k) {
         : { name: "Make read-only", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, true), off: k.lan, why: k.lan ? t("The sharing key is given to agents, so it can't be read-only") : "" }]),
       // the MCP servers and tools it may use (wakaka on Discord); the
       // Browser key connects the extension alone
-      ...(k.browser ? [] : [{ name: "MCP servers", icon: MCP_GLYPH, run: () => gatewayMCPPick(k, more) }]),
+      ...(edition || k.browser ? [] : [{ name: "MCP servers", icon: MCP_GLYPH, run: () => gatewayMCPPick(k, more) }]),
       // every account but some, those signed in later too (LeiWang_2000
       // on X); the Browser key uses no account
       // a name of the key's own for a model it may use (tsingchao on X)

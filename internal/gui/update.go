@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -168,6 +169,9 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 }
 
 func (u *updater) start() {
+	if edition.Enterprise() {
+		return
+	}
 	u.place(runtime.GOOS, update.GUI)
 	gateway.SetRestarter(u.restartBesideAsked) // magpie update in a terminal
 	gateway.SetForceRestarter(u.restartBesideNow)
@@ -866,13 +870,7 @@ func updateRoutes(mux *http.ServeMux, w Windows) {
 // relaunchBinary is update.RelaunchBinary; tests stand in for it.
 var relaunchBinary = update.RelaunchBinary
 
-// restartFrom is restartToUpdate asked from w's page, on view: a browser
-// on the app's page restarts the app, with its window up as it was, not
-// opened on the tab the browser was on.
 func restartFrom(w Windows, view string) bool {
-	if a, ok := w.(appWebHost); ok {
-		return restartToUpdate(false, mainShown(a.app), "")
-	}
 	return restartToUpdate(ownWeb(w), view != "" || mainShown(w), view)
 }
 

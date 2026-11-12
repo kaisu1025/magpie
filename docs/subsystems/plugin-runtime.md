@@ -28,7 +28,7 @@ the plugin host) are a different thing; see
 | Ctx | What `Apply` gets: `OnDispose(f)`, `Contribute(slot, key)`, `Provide(name, v)` (withdrawn when it goes), `Service(name)`, and its composed `Config`. Disposers run in reverse, each one's panic logged and the rest still run. | [`pluginrt.go`](../../internal/pluginrt/pluginrt.go) |
 | plugins.yml | `appdir.Config()/plugins.yml`: `preset` (`essentials` or `all`; `all` unless the user picks Essentials), `settled` (the defaults the file was last brought up to) and `plugins`, rows of `{id, enabled, config}` holding only what the user set. | [`config.go`](../../internal/pluginrt/config.go) |
 | Settings schema | `SchemaOf(Settings)` makes a JSON Schema object of the struct, in its fields' order (`x-order`): each exported field with a json name is a setting, of `bool`, an int, `float64` or `string`, with tags `title` (English; the window translates it), `description`, `enum` (comma separated) and `min`/`max`. Its values are the defaults. A field a form can't draw, or a tag that doesn't parse, panics at `Register`. `Schema.Validate` takes a value only as the schema allows it (a JSON float64 or a YAML int for an integer); `SetConfig(id, config)` writes the user's row through it, and `Compose` leaves out a value edited into plugins.yml by hand that it doesn't allow, so the default stands. | [`schema.go`](../../internal/pluginrt/schema.go), [`config.go`](../../internal/pluginrt/config.go) |
-| Built-in plugins | `groups`, `library`, `otel`, `sessions`, `warmups` (P0), `gateway` (P1), the Gateway page, which is Essential and in use while a gateway key is there (`access.List`), and `routing` (P2), the Routing and Routing groups pages, Essential and in use while the user has a routing group, since the second page is where groups are made and changed. `rotation` (P3), the routings besides Smart, is Essential and in use while a provider or group is routed by one of them. `middleware` (P3), the JS gateway middleware, is Essential and in use while plugins.json has a middleware on (`middleware.On`). `redact` (P3), privacy masking, is Essential and in use while Settings → Privacy asks for any masking (`masking.Wanted`). `search` (P3), magpie's web search, is Essential and in use while a search API is set up or a searcher is picked. `budget` (P3), key limits, is Essential and in use while a gateway key has a limit. `usage` (P2), the Usage page, is Essential too, with no `InUse`: what it shows the gateway counts anyway, and the tray panel's Usage tab still shows the allowances with it off. The Gateway page's one setting, `callsPage` (10, 20, 50 or 100; 20), is how many recent calls the page shows at a time. The other five aren't Essential. Each one's `InUse` counts what the user made with it: routing groups not Auto and not hidden, library items given to agents, a collector sent to, gateway conversations recorded, warm-ups and check-ins on. | [`plugins/`](../../plugins) |
+| Built-in plugins | The enterprise server registers budget, gateway, groups, privacy masking, rotation, routing and usage. The desktop activates gateway for its local relay and usage for this computer's requests. | [Registration](../../plugins/all/all.go), [enterprise editions](enterprise-editions.md) |
 
 The boundary is checked by `TestPluginsImportOnlyCore`: no package outside
 `plugins/` imports one (but `main.go`, through `plugins/all`), a plugin never
@@ -172,9 +172,8 @@ as" (#3897).
 ## Gateway extension points (P3): observer
 
 P3 opens the gateway to plugins at five points: observer, router strategy,
-middleware, tool and budget. The observer is the first. It only reads, so it is
-the safest to move first. `plugins/otel` is its first consumer, and with the
-plugin off the gateway does no observing work.
+middleware, tool and budget. The observer reads without changing what the
+gateway serves. Enterprise builds do not register a trace exporter.
 
 | Part | What it does | Source |
 | --- | --- | --- |
@@ -183,8 +182,6 @@ plugin off the gateway does no observing work.
 | `Begin` and `Watch` | As a request starts the gateway asks each observer (`observeRequest`) with `usage.Request`: its header, agent, session (the native one when the agent names it), call kind (`auxiliary` for Claude's tool-less helper calls) and `Plain` (loopback, no gateway key, not passed on from another magpie). A `Watch` it returns gets `Attempt` for each routing attempt, unbilled failures and retries too, and `End` once. Both records carry `CallerKeyName`, captured from the authenticated caller when observing begins. The OTLP exporter sends this nonempty name as `magpie.gateway_key.name` on the root, attempts, ledger spans and metric points; it never sends the key's ID or secret (see [OTLP export](../reference.md#otlp-export)). With no observer, or none watching, the request carries nothing. | [`observe.go`](../../internal/gateway/observe.go) |
 | Bodies | `Bodies()` is `NoBodies`, `CapturedBodies` (the first 256 KiB, cut with `usage.BodyCut`) or `WholeBodies` (the reply spooled whole as it streams, #538). The gateway takes the most any observer wants now (`ObservedBodies`): it keeps the whole reply only when one asks for it, and puts bodies on an attempt's record only when one asks for any. | [`observe.go`](../../internal/gateway/observe.go), [`capture.go`](../../internal/gateway/capture.go) |
 | `Ledger` and `Watched` | Every row `Append` writes is passed to each observer. A row of a request some observer watched has `Watched` set (`appendUsage`), so an observer that sent the request's attempts doesn't send its row again. | [`usage.go`](../../internal/usage/usage.go), [`lan.go`](../../internal/gateway/lan.go) |
-| `internal/otlp` | The OTLP/HTTP exporter, moved whole out of `internal/usage`: `otlp.New()` is an `Exporter`, a `usage.Observer`. Its Begin leaves a local agent's own turn to the agent's transcript when session tracing reads it, and takes a W3C `traceparent` as the parent. Settings are read on each call, as before. Both signals' resource is `service.name=magpie` with `OTEL_RESOURCE_ATTRIBUTES` merged over it and `OTEL_SERVICE_NAME` over that (`otelResourceAttributes`, #5167); an invalid variable is discarded whole and logged once, by entry position only. Nothing about the host is collected. |  [`otlp/`](../../internal/otlp) |
-| `plugins/otel` | Requires `window`, `settings` and `gateway`. Apply registers `otlp.New()` and disposes of it when turned off. `InUse` is 1 while `settings.OTelExport` says to send (settings.json or `MAGPIE_OTEL_*`), so a user who exports only through the environment keeps it on under Essentials. | [`otel.go`](../../plugins/otel/otel.go) |
 
 ## Gateway extension points (P3): router strategy
 
@@ -452,8 +449,7 @@ remembering its layer (`Source`):
 - A page plugin's off is the window's alone: its page, sections and rows
   leave the window. The gateway, the TUI and the CLI serve the same either
   way, and nothing the user made is deleted. A gateway plugin's off is the
-  gateway's: with `otel` off nothing is exported and no reply is kept
-  whole for it. An observer can't fail a request; it only reads. With
+  gateway's. An observer only reads and cannot fail a request. With
   `rotation` off a pool set to one of its routings is tried in its listed
   order; a strategy that fails falls back to the same order, never to an
   error. A JS middleware that fails leaves the request as it was; masking
@@ -471,15 +467,13 @@ remembering its layer (`Source`):
 - `i18n-keys`, `gui-de`, `gui-ja`, `gui-zh-tw`, and a moved page's own
   tests (`sessions-*`, `session-*`, `sess-*`; `library-*`, `skill-*`,
   `mcp-*`, `found-skill-*`) in Chromium and WebKit.
-- `internal/gui/tests/builtins.test.cjs` (the settings form) and
-  `plugin-kernel.test.cjs` (the boundary, Try again, `callsPage` from
+- `internal/gui/tests/plugin-kernel.test.cjs` (the boundary, Try again, `callsPage` from
   boot.js and from a change) in Chromium and WebKit, every language, 1100,
   800 and 420 points; the Gateway page's own tests (`gateway-*`,
   `recent-calls-*`) unchanged.
 - P3 observer: `go test ./internal/usage/ -run 'TestObserver|TestBodiesStayOutOfTheLog'`,
   `go test ./internal/gateway/ -run 'TestObserverPoint|OTel|Deferred'`,
-  `go test ./internal/otlp/ ./plugins/otel/`
-  (`TestOnExportsOffSendsNothing`, `TestInUseByEnvironment`) and
+  and
   `go test ./internal/pluginrt/ -run TestKeepFreshFollowsPluginsYml`.
 - P3 router strategy: `go test ./internal/routes/ ./plugins/rotation/`
   (`TestRegisterStacks`, `TestApplyFailsOpen`, the strategies' orders,

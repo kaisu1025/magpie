@@ -4013,20 +4013,9 @@ img.nav-ic { border-radius: 3px; object-fit: contain; }
 .font-menu .sc-top { top: -4px; }
 .font-menu .pm-head { white-space: normal; }
 .font-menu .pm-name { white-space: normal; overflow-wrap: anywhere; }
-/* Keep export consent readable, and give collector URLs their own line. */
-#otelList .row .sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
-#otelList .row { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; }
-#otelList .otel-stacked { flex-wrap: wrap; gap: 8px; }
-#otelList .otel-stacked > .who { flex-basis: 100%; }
-#otelList .otel-stacked > .val { width: 100%; max-width: none; margin-left: 0; }
-#otelList input.words { width: 100%; }
-#otelList .otel-stacked .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
-#otelList .otel-host, #otelList .otel-keys { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
-#otelList .otel-host > [hidden] { display: none; }
-#otelList .otel-env { padding: 12px 14px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
 
-.session-terminal-select, .pref-pick { max-width: min(230px, 45%); height: 26px; color: var(--fg); }
-.session-terminal-select:focus-visible, .pref-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pref-pick { max-width: min(230px, 45%); height: 26px; color: var(--fg); }
+.pref-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .row.pref .segs { flex: none; margin-left: auto; }
 .proxy-segs { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
 .proxy-controls, .proxy-auth { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }
@@ -4119,58 +4108,7 @@ input.words.gateway-port { flex: none; width: 110px; font-variant-numeric: tabul
 input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; min-width: 0; }
 input.words.remote-url { width: 280px; }
 input.words.remote-key { width: 160px; }
-/* a search API that signs in as a plugin's provider, in the key's place */
-.search-signs { flex: 1 1 120px; min-width: 0; font-size: 12px; color: var(--fg-2); overflow-wrap: anywhere; }
-/* a search API's base URL (#1580): on a line of its own under the key */
-.prefs .row.search-add .val.rule-add { flex-wrap: wrap; row-gap: 6px; }
-.prefs .row.search-add input.words.search-url { flex: 1 1 100%; }
-/* a search API's keys (辰林鸭~ on Discord), listed as a provider's are:
-   how its searches pick one and Check again wrapped and right-aligned on a
-   narrow window in a long language rather than past its edge; each key's
-   rest and what it has used on a line under it */
-.row.pref.search-keys .val { flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.row.pref.search-keys .who { min-width: 0; }
-.search-key-list { margin-top: 8px; }
-.search-key-list > .acc { position: relative; flex-wrap: wrap; row-gap: 2px; cursor: default; }
-.search-key-list > .acc code.n { font-family: var(--code-font, var(--code)); font-weight: 400; color: var(--fg-2); }
-.search-key-list > .acc code.revealed { white-space: normal; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
-.search-key-list > .acc.off code.n { opacity: .55; }
-.search-key-list > .acc .key-state { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 2px 10px; padding-left: 25px; font-size: 11.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
-.search-key-list .key-state .warn { color: var(--amber); }
-.search-key-list .key-state .err { color: var(--red); }
-.search-key-list .key-quota { display: contents; }
-.search-key-list > .acc.adding { display: flex; align-items: center; gap: 6px; }
-.search-key-list > .acc.adding input { flex: 1 1 12em; min-width: 0; }
-.search-key-list.reorderable > .acc:not(.add, .adding) { cursor: grab; touch-action: pan-y; }
-.search-key-list.reorderable > .acc:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.search-key-list > .acc > .grip { position: absolute; left: 2px; top: 19px; translate: 0 -50%; width: 6px; height: 11px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; pointer-events: none; }
-.search-key-list > .acc:is(:hover, .dragging) > .grip { opacity: 1; }
-.search-key-list > .acc:focus-visible > .grip { opacity: 1; }
-@media (hover: none) { .search-key-list > .acc > .grip { opacity: 1; } }
-.search-key-list.sorting { user-select: none; -webkit-user-select: none; }
-.search-key-list.sorting > .acc { transition: transform .16s cubic-bezier(.22, 1, .36, 1); cursor: grabbing; }
-.search-key-list.sorting > .acc.dragging { z-index: 2; background: var(--card-2); box-shadow: 0 0 0 1px var(--line); transition: none; }
 .prefs .val.rule-add .segs { margin-left: 0; }
-/* a search API and its keys' row, dragged as one into the order they are
-   asked in (#2286); its grip shows only under the pointer, and one
-   switched off is dimmed but for its switch */
-.row + .search-unit, .search-unit + .search-unit, .search-unit + .row { border-top: 1px solid var(--line-2); }
-.search-unit { position: relative; background: var(--card); cursor: grab; }
-.search-unit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.search-unit > .grip { position: absolute; left: 4px; top: 50%; translate: 0 -50%; width: 6px; height: 11px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; pointer-events: none; }
-.search-unit.with-keys > .grip { top: 24px; translate: none; }
-.search-unit:is(:hover, .dragging) > .grip { opacity: 1; }
-.search-unit:focus-visible > .grip { opacity: 1; }
-@media (hover: none) { .search-unit > .grip { opacity: 1; } }
-.search-unit .row .sub.revealed, .search-unit code { cursor: text; }
-.search-unit .row .val button { cursor: pointer; }
-#searchList.sorting .search-unit { transition: transform .22s cubic-bezier(.22, 1, .36, 1); cursor: grabbing; }
-#searchList .search-unit.dragging { z-index: 2; transition: none; box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); }
-.search-unit.off .row .who, .search-unit.off .search-keys .val { opacity: .5; }
-/* its buttons and switch: the whole row's width when it needs it, and
-   wrapped under each other rather than past the window's edge */
-.prefs .row.pref.search-api .val { max-width: 100%; flex-wrap: wrap; justify-content: flex-end; }
-.row.pref.search-api .search-on { margin-left: 6px; }
 /* a rule open to edit (nf1qaz2w on Discord): laid out as the add row; a
    narrow window puts the match, Save and Cancel on a line of their own under
    the name and Prefix or Regex, the match keeping room to type in */
@@ -4217,11 +4155,7 @@ input.words.remote-key { width: 160px; }
 .prefs .val.with-effort { gap: 6px; }
 .prefs .val.with-effort > .rt-cond:not(.side-effort) { min-width: 0; flex: 0 1 auto; }
 .prefs .val > .side-effort { flex: none; }
-/* Web search's searchers after the one named, in order: chips that wrap */
-.prefs .val.searcher-then-list { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .prefs .val.unmasked-list { flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.prefs .val.searcher-then-list > .rt-cond { min-width: 0; max-width: 100%; }
-.searcher-then-n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .side-effort .effort-ic svg { width: 100%; height: 100%; }
 /* its controls are placed in a fixed height, so it stays border-box where
    Settings' other rows go content-box (a pointer that hovers): there the

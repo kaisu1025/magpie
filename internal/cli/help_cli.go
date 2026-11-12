@@ -46,13 +46,6 @@ func helpFor(args []string) string {
 			return ruleUsage
 		}
 		return groupUsage
-	case "library", "lib":
-		if len(args) > 1 && (args[1] == "project" || args[1] == "projects") {
-			return "  " + libraryProjectUsage
-		}
-		return "  " + libraryUsage
-	case "plugin", "plugins":
-		return pluginUsage
 	case "quota", "quotas":
 		return quotaUsage
 	case "statusline":
@@ -71,28 +64,14 @@ func helpFor(args []string) string {
 		return goroutinesUsage
 	case "log", "logs":
 		return logUsage
-	case "sessions":
-		return sessionsUsage
 	case "search":
 		return searchUsage
-	case "tool", "tools":
-		return toolUsage
 	case "visible":
 		return visibleUsage
-	case "webdav", "dav":
-		return webdavUsage
-	case "s3":
-		return s3Usage
-	case "github":
-		return githubUsage
-	case "claude-code":
-		return claudeCodeUsage
 	case "settings":
 		return settingsUsage
 	case "list":
 		cmd = "ls"
-	case "account":
-		cmd = "accounts"
 	case "app", "gui":
 		cmd = ""
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/netguard"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -34,7 +35,7 @@ import (
 // while shared too: sharing asks remote callers for a gateway key, and
 // never widens the listener past the address the user chose (#1112).
 func listenAddr() string {
-	if s := settings.Load(); s.LAN && pinnedHost() == "" {
+	if s := settings.Load(); edition.Current() != edition.Desktop && s.LAN && pinnedHost() == "" {
 		return "0.0.0.0:" + Port()
 	}
 	return Addr()
@@ -167,7 +168,9 @@ func OnNetwork() bool {
 
 // remoteKeyed: requests from another machine are answered, with an enabled
 // gateway key — while the gateway is shared, or listens on the network.
-func remoteKeyed() bool { return settings.Load().LAN || OnNetwork() }
+func remoteKeyed() bool {
+	return edition.Current() != edition.Desktop && (settings.Load().LAN || OnNetwork())
+}
 
 // PublicHost is PublicURL's host, "" when it isn't set.
 func PublicHost() string {
@@ -652,9 +655,10 @@ func lanGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if remote || managedKey(r) {
+		required := remote || enterpriseClientKey(r)
+		if required || managedKey(r) {
 			var ok bool
-			r, ok = identifyCaller(w, r)
+			r, ok = identifyCaller(w, r, required)
 			if !ok {
 				return
 			}
@@ -664,6 +668,22 @@ func lanGuard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// The enterprise listener can sit behind a raw TCP forward that appears
+// local. Require a key for model APIs even on loopback.
+func enterpriseClientKey(r *http.Request) bool {
+	if edition.Current() != edition.Server {
+		return false
+	}
+	p := r.URL.Path
+	if strings.HasPrefix(p, NativePath) {
+		return true
+	}
+	if strings.HasPrefix(p, "/v1/magpie/") || p == CAPath || p == KeyPagePath || p == JoinPagePath {
+		return false
+	}
+	return ClientPath(p) || p == "/api/tags" || p == "/api/show" || p == "/api/chat" || p == "/api/generate"
 }
 
 // callbacks are the callback tokens of the Claude subscription runs now
@@ -785,7 +805,7 @@ func callerGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if access.Caller(r.Context()).KeyID == "" && managedKey(r) && (local(r) || remoteKeyed()) {
 			var ok bool
-			r, ok = identifyCaller(w, r)
+			r, ok = identifyCaller(w, r, !local(r))
 			if !ok {
 				return
 			}
@@ -794,7 +814,7 @@ func callerGuard(next http.Handler) http.Handler {
 	})
 }
 
-func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+func identifyCaller(w http.ResponseWriter, r *http.Request, required bool) (*http.Request, bool) {
 	var who access.Identity
 	ok := false
 	var refused *access.Refused
@@ -817,7 +837,7 @@ func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool
 		writeError(w, provider.Chat, http.StatusUnauthorized, refused.Why)
 		return r, false
 	}
-	if !ok && !local(r) {
+	if !ok && required {
 		if over, retry := tooManyAuthFails(); over {
 			// A flood of wrong keys: stop answering each one (no 401 oracle,
 			// no unbounded work) until the bucket refills. A valid key never

@@ -9,7 +9,7 @@ navHides(); // the pages built-in plugins switched off have, from boot.js
 // from the tray or a reload) first, then the one kept; a page gateway mode
 // leaves out, or one there is no longer, gives way to the first page.
 // the pages the window can open on besides the first (Agents)
-const OPEN_VIEWS = ["providers", "plugins", "settings", ...magpie.pages()];
+const OPEN_VIEWS = ["providers", "settings", ...magpie.pages()];
 function keptView() {
   const asked = params.get("view");
   if (asked === "agents" || OPEN_VIEWS.includes(asked)) return asked;
@@ -17,9 +17,8 @@ function keptView() {
   try { v = localStorage.getItem("magpie.lastView") || ""; } catch { /* none kept */ }
   return OPEN_VIEWS.includes(v) ? v : ""; // one gateway mode leaves out, show() makes Providers
 }
-const firstView = mode === "window" ? keptView() : "";
-// from the tray panel's More in Plugins (q): Discover, once show() picked the tab (#3579)
-if (OPEN_VIEWS.includes(firstView)) show(firstView).then(() => view === "plugins" && params.has("q") && window.pluginQuery?.(params.get("q")));
+const firstView = mode === "window" ? keptView() || (enterpriseDesktop ? "providers" : "") : "";
+if (OPEN_VIEWS.includes(firstView)) show(firstView);
 else if (mode === "window" && !gatewayMode && !sideNav()) slide($("#nav"), "nav");
 // in gateway mode the first page is Providers, Agents' tab gone
 if (gatewayMode) setGatewayMode(true);

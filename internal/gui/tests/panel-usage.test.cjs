@@ -15,7 +15,7 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
-const assets = path.resolve(__dirname, "../assets");
+const assets = process.env.MAGPIE_ASSETS || path.resolve(__dirname, "../assets");
 const midnight = new Date();
 midnight.setHours(0, 0, 0, 0);
 
@@ -77,21 +77,29 @@ function page(q) {
   };
 }
 
-function serve(lang, asked, opened, fitted = [], resize) {
+function serve(lang, asked, opened, fitted = [], resize, edition = "") {
   const state = { agents: [{ id: "codex", name: "Codex", path: "/test/config.toml", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
+  const featuresOff = edition === "enterprise-desktop" ? ["groups", "routing", "redact"] : [];
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang, theme: "light", web: true, edition, featuresOff })};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
-    if (url.pathname === "/api/usage/requests") { asked.push(url.searchParams); return json(page(url.searchParams)); }
+    if (url.pathname === "/api/usage/requests") {
+      asked.push(url.searchParams);
+      const ledger = page(url.searchParams);
+      if (edition) ledger.computers = [{ id: "this" }, { id: "other", name: "Other computer" }];
+      return json(ledger);
+    }
     if (url.pathname === "/api/gateway/trace") return json({ mine: true, now: new Date().toISOString(), seq: 0, totals: { requests: 0, rerouted: 0, errors: 0 }, routes: [] });
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/usage") return json({ calls: 1, input: 1, output: 1, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0, unpriced: 0, bucket: "day", series: [], agents: [], models: [] });
-    if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/usage/quotas") return json(edition === "enterprise-desktop" ? [
+      { provider: "remote/deepseek", name: "DeepSeek · Remote magpie", from: "Remote magpie", balance: "¥53.15" },
+    ] : []);
     if (url.pathname === "/api/groups") return json({ groups: [] });
-    if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], gateway: { running: true, window: true } });
     if (url.pathname === "/api/window/main") { opened.push(url.search); return route.fulfill({ status: 204 }); }
     if (url.pathname === "/api/window/fit") {
       const h = Number(url.searchParams.get("h"));
@@ -113,6 +121,72 @@ const want = {
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: enterprise desktop shows only Agents and local Usage in the panel`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const errors = [], asked = [], opened = [], quotaReads = [];
+      const open = async (query, viewport) => {
+        const p = await browser.newPage({ viewport, reducedMotion: "reduce" });
+        p.on("pageerror", (e) => errors.push(e.message));
+        p.on("request", (r) => { if (new URL(r.url()).pathname.startsWith("/api/usage/quotas")) quotaReads.push(r.url()); });
+        await p.addInitScript(() => {
+          localStorage.setItem("magpie.panelTab", "stats");
+          localStorage.setItem("magpie.usageTab", "usage");
+        });
+        await p.route("**/*", serve(lang, asked, opened, [], undefined, "enterprise-desktop"));
+        await p.goto("http://magpie.test/" + query);
+        return p;
+      };
+      const panel = await open("?mode=panel", { width: 440, height: 640 });
+      await panel.locator("#panelUsage .pu-tot").waitFor();
+      const panelTabs = await panel.locator("#ptabs button").evaluateAll((buttons) =>
+        buttons.filter((b) => b.getClientRects().length).map((b) => b.dataset.ptab));
+      assert.deepEqual(panelTabs, ["agents", "stats"]);
+      assert.equal(await panel.locator("#panelQuota").count(), 0);
+      assert.equal(await panel.locator('#ptabs [data-ptab="stats"]').innerText(), want[lang].tab);
+      assert.equal(await panel.locator("#panelUsage .pu-bar .sess-pick").count(), 1, "only the provider filter is shown");
+      await panel.getByRole("button", { name: want[lang].periods[1], exact: true }).click();
+      await panel.locator("#panelUsage:not(.pu-loading) .led-day").first().waitFor();
+      const dayButton = panel.locator("#panelUsage .led-day").first();
+      const day = await dayButton.getAttribute("data-day");
+      await dayButton.click();
+      await panel.locator('#panelUsage:not(.pu-loading) .led-day[aria-pressed="true"]').waitFor();
+      const windowRequest = panel.waitForRequest("**/api/window/main?*");
+      await panel.getByRole("button", { name: want[lang].open }).click();
+      const q = new URL((await windowRequest).url()).searchParams;
+      assert.equal(q.get("view"), "usage");
+      assert.equal(q.get("tab"), "requests");
+      assert.equal(q.get("period"), "7d");
+      assert.equal(q.get("day"), day);
+
+      const main = await open("?" + q, { width: 1040, height: 760 });
+      const nav = main.locator('#nav [data-view="usage"]');
+      await main.locator("#view-usage #ledWrap").waitFor();
+      assert.equal(await nav.innerText(), want[lang].tab);
+      assert.equal(await nav.getAttribute("aria-current"), "page");
+      assert(await main.locator("#ledgerPane").isVisible());
+      for (const id of ["usageTab", "usagePane", "sessionsPane", "contextPane", "ledComputer"]) {
+        assert(!(await main.locator("#" + id).isVisible()), id);
+      }
+      const scope = lang === "zh" ? "统计本机网关与会话日志中的调用。本地拒绝的请求不计入汇总。" : "Gateway and session-log calls on this computer; local rejections excluded from totals.";
+      assert.equal(await main.locator("#ledScope").innerText(), scope);
+      assert.equal(await panel.locator("#panelUsage > .usage-note").innerText(), scope);
+      assert(asked.length > 2 && asked.every((p) => p.get("computer") === "this"));
+      assert(asked.some((p) => p.get("period") === "7d" && p.get("day") === day && p.get("limit") !== "1"));
+      assert.deepEqual(quotaReads, []);
+
+      await main.locator('#nav [data-view="providers"]').click();
+      await nav.click();
+      await main.locator("#view-usage:not(.loading) #ledgerPane").waitFor();
+      assert.equal(await main.locator("#status.err").count(), 0);
+      assert.deepEqual(errors, []);
+      if (process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await panel.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-local-usage-panel.png`) });
+        await main.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-local-usage-window.png`) });
+      }
+    });
+
     test(`${engine} ${lang}: the tray panel's Usage tab`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const errors = [], pages = [];

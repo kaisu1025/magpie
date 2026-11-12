@@ -170,8 +170,6 @@ function corsSays(m) {
   return t(m);
 }
 function renderCORS(s) {
-  renderWebPage(); // Browser access, the section under this one
-  renderRemote(); // Another magpie, under that
   const box = $("#corsList");
   box.replaceChildren();
   const origins = s.corsOrigins || [];
@@ -635,7 +633,7 @@ function renderLAN(s) {
     update();
   }
   if (sub) row(head || t("In a container"), sub, "").classList.add("lan-container");
-  renderJoin(s, box);
+  if (!edition) renderJoin(s, box);
 }
 
 // renderJoin: Join with a password (EV_John_Liu on X), under the shared
@@ -687,140 +685,4 @@ function renderJoin(s, box) {
   lv.append(el("code", "", link), copyBtn(link, t("Join link")));
   lr.append(lw, lv);
   box.append(lr);
-}
-
-// renderWebPage: Browser access, the app's own page served to a browser
-// (apppage.go; jiakun_zhao on X managed magpie through a Cloudflare tunnel
-// with `magpie web` kept running in a terminal beside the app). Off, this
-// computer alone (for a tunnel or an SSH forward to reach), or the local
-// network. The page always asks for its key: the link carries it, and a
-// browser without it gets nothing. The app's windows alone draw it; a
-// browser on the page can't turn it off under itself.
-let webPageState = null, webPagePort = null;
-// Each draw asks again, as a port another program held can come free; the
-// answer draws without asking.
-function renderWebPage(asked) {
-  const head = $("#webPageHead"), box = $("#webPageList");
-  if (!box) return;
-  head.hidden = box.hidden = web;
-  if (web) return;
-  if (!asked) api("web-page").then((r) => { webPageState = r; renderWebPage(true); }).catch(() => {});
-  const s = webPageState;
-  if (!s) return;
-  const set = (body) => writingPrefs(api("web-page", body))
-    .then((r) => { webPageState = r; webPagePort = null; renderWebPage(true); })
-    .catch((e) => { status(t(e.message), "err"); webPageState = null; renderWebPage(); });
-  const rows = [];
-  const row = (name, sub, ...tools) => {
-    const r = el("div", "row pref");
-    const who = el("div", "who");
-    who.append(el("div", "name", name));
-    if (sub) who.append(sub instanceof Node ? sub : el("div", "sub", sub));
-    const val = el("div", "val");
-    val.append(...tools);
-    r.append(who, val);
-    rows.push(r);
-    return r;
-  };
-  row(t("Open magpie in a browser"),
-    t("The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}", { port: s.port }),
-    segs([["", t("Off")], ["local", t("This computer")], ["lan", t("Local network")]], s.mode || "", (mode) => set({ mode }))).classList.add("web-page-mode");
-  if (s.mode) {
-    const why = s.error ? el("div", "sub err", s.error.startsWith("port ") ? t("Port {p} is taken by another program, magpie web perhaps: magpie tries again every few seconds", { p: s.port }) : t(s.error))
-      : el("div", "sub say", s.serving ? t("Served; anyone with this link can change every setting") : t("Starting…"));
-    const links = [s.link, ...(s.mode === "lan" ? s.network || [] : [])].filter(Boolean);
-    const box2 = el("div", "web-page-links");
-    for (const l of links) {
-      const line = el("span", "web-page-link");
-      line.append(el("code", "", l.replace(/\?k=.*/, "?k=…")), copyBtn(l, t("Link"), t("Copied")));
-      box2.append(line);
-    }
-    const rekey = el("button", "text", t("New key"));
-    rekey.onclick = () => set({ newKey: true });
-    row(t("Link"), why, box2, rekey).classList.add("web-page-link-row");
-    const field = input(webPagePort ?? String(s.port), "3430");
-    field.className = "words gateway-port";
-    field.inputMode = "numeric";
-    field.setAttribute("aria-label", t("Port"));
-    const save = el("button", "text", t("Apply"));
-    save.onclick = () => {
-      const p = Number(field.value.trim());
-      if (!Number.isInteger(p) || p < 1024 || p > 65535) return status(t("A port is a number from 1024 to 65535"), "err");
-      set({ port: p });
-    };
-    field.oninput = () => { webPagePort = field.value; };
-    field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save.onclick(); };
-    row(t("Port"), "", field, save);
-    if (s.mode === "lan" && !s.tls) {
-      const r = row(t("Not encrypted"), t("Other computers reach the page over plain HTTP, so anyone on this network can read its key: on a network you don’t trust, keep it on This computer and reach it through a tunnel"));
-      r.classList.add("web-page-warn");
-    }
-  }
-  box.replaceChildren(...rows);
-}
-
-// renderRemote: Another magpie, a magpie on a server (magpie daemon install
-// --web, magpie web, or an app's Browser access) opened in a window of the
-// app's own (xuanwo on X: its routing and usage, read from the desktop).
-// The window is that magpie's web page, signed in with the key in its link
-// as a browser is; the app checks the key before opening it and keeps the
-// address and key on this computer alone (remote.go). The key is never
-// read back into the page. The app's windows alone draw it.
-let remoteState = null, remoteDraft = { url: null, key: "" };
-function remoteSays(m) {
-  let x;
-  if (/^type the other magpie's address/.test(m)) return t("Type the other magpie’s address");
-  if (/^type that magpie's key/.test(m)) return t("Type that magpie’s key: the k= in the link it printed, or its MAGPIE_WEB_KEY");
-  if (/turned the key away/.test(m)) return t("That magpie turned the key away: use the key in the link it printed");
-  if (/doesn't let this computer in/.test(m)) return t("That magpie doesn’t let this computer in: add this computer’s address to its allowed addresses");
-  if ((x = /^(\S+) is a name on the internet/.exec(m))) return t("{host} is a name on the internet: open it over https://, or the key crosses the network unencrypted", { host: x[1] });
-  if ((x = /^(\S+)'s certificate isn't trusted/.exec(m))) return t("{host}’s certificate isn’t trusted by this computer", { host: x[1] });
-  if ((x = /^(\S+) doesn't answer/.exec(m))) return t("{host} doesn’t answer", { host: x[1] });
-  if ((x = /^(\S+) answered .*not as a magpie page/.exec(m))) return t("{host} doesn’t answer as a magpie page: check the address and port (magpie web’s is 3430)", { host: x[1] });
-  if (/^the key is \d+ characters/.test(m)) return t("The key is too short");
-  if (/^the key takes letters/.test(m)) return t("The key takes letters, digits and - . _ ~ only");
-  return t(m);
-}
-function renderRemote(asked) {
-  const head = $("#remoteHead"), box = $("#remoteList");
-  if (!box) return;
-  head.hidden = box.hidden = web;
-  if (web) return;
-  if (!asked) api("remote").then((r) => { remoteState = r; renderRemote(true); }).catch(() => {});
-  const s = remoteState;
-  if (!s) return;
-  const row = (name, ...tools) => {
-    const r = el("div", "row pref");
-    const who = el("div", "who");
-    who.append(el("div", "name", name));
-    const val = el("div", "val");
-    val.append(...tools);
-    r.append(who, val);
-    return r;
-  };
-  const addr = input(remoteDraft.url ?? s.url, "https://magpie.example.com");
-  addr.className = "words remote-url";
-  addr.setAttribute("aria-label", t("Address"));
-  addr.oninput = () => { remoteDraft.url = addr.value; };
-  const key = input(remoteDraft.key, s.hasKey ? t("Kept") : t("The k= in its link"), "password");
-  key.className = "words remote-key";
-  key.setAttribute("aria-label", t("Key"));
-  key.oninput = () => { remoteDraft.key = key.value; };
-  const open = el("button", "text", t("Open"));
-  open.onclick = () => {
-    open.disabled = true;
-    api("remote", { url: addr.value, key: key.value })
-      .then((r) => { remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true); })
-      .catch((e) => { open.disabled = false; status(remoteSays(e.message), "err"); });
-  };
-  for (const f of [addr, key]) f.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") open.onclick(); };
-  const tools = [key, open];
-  if (s.url) {
-    const forget = el("button", "text", t("Forget"));
-    forget.onclick = () => api("remote/forget", {})
-      .then((r) => { remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true); })
-      .catch(statusTErr);
-    tools.push(forget);
-  }
-  box.replaceChildren(row(t("Address"), addr), row(t("Key"), ...tools));
 }

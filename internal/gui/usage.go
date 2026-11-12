@@ -15,6 +15,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
@@ -33,11 +34,18 @@ type (
 )
 
 var (
-	usageState   = usageapi.PageIn
-	ledgerPage   = usageapi.LedgerPage
-	periodOf     = usageapi.PeriodOf
-	ledgerFilter = usageapi.FilterIn
+	usageState = usageapi.PageIn
+	ledgerPage = usageapi.LedgerPage
+	periodOf   = usageapi.PeriodOf
 )
+
+func ledgerFilter(r *http.Request) usage.Filter {
+	f := usageapi.FilterIn(r)
+	if edition.Current() == edition.Desktop {
+		f.Computer = usage.ThisComputer
+	}
+	return f
+}
 
 func init() {
 	usageapi.Clients = func() []usageapi.Client {
@@ -101,6 +109,9 @@ func requestContent(agent, session string, from, to, at time.Time) contentJSON {
 }
 
 func usageRoutes(mux *http.ServeMux, w Windows) {
+	if edition.Current() != edition.Desktop {
+		usageSessionRoutes(mux)
+	}
 	mux.HandleFunc("GET /api/usage", coldTurn(func(rw http.ResponseWriter, r *http.Request) {
 		// the days and hours of the reader's zone, which the page names
 		writeJSON(rw, usageState(periodOf(r.URL.Query().Get("period")), usageapi.ZoneOf(r)))

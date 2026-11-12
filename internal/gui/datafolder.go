@@ -71,9 +71,6 @@ func dataFolderRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		app := w
-		if a, ok := w.(appWebHost); ok { // a browser on the app's page: the app restarts
-			app = a.app
-		}
 		var err error
 		switch r.PathValue("action") {
 		case "move", "home":

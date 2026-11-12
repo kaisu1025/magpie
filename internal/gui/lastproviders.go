@@ -8,6 +8,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/edition"
 )
 
 // The last-known providers list (#1519, fatkun): the Providers page asked
@@ -32,6 +33,7 @@ var lastProviders struct {
 
 type providersFile struct {
 	Version   string        `json:"version"`
+	Edition   edition.Mode  `json:"edition,omitempty"`
 	Providers providersJSON `json:"providers"`
 }
 
@@ -56,7 +58,7 @@ func keptProviders(s providersJSON) providersFile {
 		ps[i] = keptProvider(p)
 	}
 	s.Providers = ps
-	return providersFile{Version: Version, Providers: s}
+	return providersFile{Version: Version, Edition: edition.Current(), Providers: s}
 }
 
 // keptProvider is what is kept of a provider's row.
@@ -98,7 +100,7 @@ func keepProvidersSummed(s providersJSON, sum [32]byte) {
 }
 
 // lastKnownProviders is the last list built, by this run or the one
-// before it, as kept; false when none is kept, or another version kept it.
+// before it, as kept; false when none is kept, or another version or edition kept it.
 func lastKnownProviders() (json.RawMessage, bool) {
 	lastProviders.Lock()
 	if !lastProviders.read {
@@ -109,9 +111,10 @@ func lastKnownProviders() (json.RawMessage, bool) {
 	lastProviders.Unlock()
 	var f struct {
 		Version   string          `json:"version"`
+		Edition   edition.Mode    `json:"edition,omitempty"`
 		Providers json.RawMessage `json:"providers"`
 	}
-	if len(b) == 0 || json.Unmarshal(b, &f) != nil || f.Version != Version || len(f.Providers) == 0 || f.Providers[0] != '{' {
+	if len(b) == 0 || json.Unmarshal(b, &f) != nil || f.Version != Version || f.Edition != edition.Current() || len(f.Providers) == 0 || f.Providers[0] != '{' {
 		return nil, false
 	}
 	// marked, for the page to tell it from a fresh one

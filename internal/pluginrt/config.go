@@ -17,6 +17,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/beat"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/filememo"
 )
@@ -109,6 +110,7 @@ const (
 	FromPreset  Source = "preset"
 	FromUser    Source = "user"
 	FromInUse   Source = "in use"
+	FromEdition Source = "edition"
 )
 
 // Composed is one plugin as plugins.yml and its use make it.
@@ -131,6 +133,10 @@ func Compose(ms []Manifest, f File) []Composed {
 	out := make([]Composed, 0, len(ms))
 	for _, m := range ms {
 		c := Composed{ID: m.ID, Enabled: true, Source: FromDefault, Config: map[string]any{}, Sources: map[string]Source{}}
+		if !edition.Builtin(m.ID) {
+			out = append(out, Composed{ID: m.ID, Source: FromEdition})
+			continue
+		}
 		for k, v := range m.Defaults {
 			c.Config[k], c.Sources[k] = v, FromDefault
 		}
@@ -397,7 +403,7 @@ func KeepFresh(ctx context.Context, every func() time.Duration, also ...string) 
 func allOn(ms []Manifest) map[string]bool {
 	on := map[string]bool{}
 	for _, m := range ms {
-		on[m.ID] = true
+		on[m.ID] = edition.Builtin(m.ID)
 	}
 	return on
 }

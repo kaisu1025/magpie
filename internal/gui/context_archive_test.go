@@ -25,7 +25,6 @@ import (
 // archive has no copy of says why.
 func TestContextTextFromTheArchive(t *testing.T) {
 	h := archiveHome(t, fakeArchive{objs: map[string][]byte{}})
-	archiveBucket = func() (archiveStore, bool) { return nil, false }
 	unmask := gwmw.Mask(masking.Masker{})
 	t.Cleanup(unmask)
 	prev := served.Swap(nil)

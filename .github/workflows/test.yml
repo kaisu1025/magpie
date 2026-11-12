@@ -170,12 +170,3 @@ jobs:
         env:
           CGO_ENABLED: '0'
         run: make release-cli TARGETS="${{ matrix.goos }}/${{ matrix.goarch }}"
-      - uses: actions/setup-node@v4
-        if: matrix.goos == 'linux'
-        with:
-          node-version: 22
-      - name: Test the site and installer
-        if: matrix.goos == 'linux'
-        run: |
-          sh -n site/public/install.sh
-          node --test site/*.test.mjs

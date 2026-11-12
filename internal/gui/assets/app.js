@@ -38,16 +38,15 @@ const pageVersion = window.bootPrefs?.version || "";
 // magpie web seen from another computer: localhost is the viewer's (curtinp118)
 const remotePage = web && !/^(localhost|127(\.\d+){3}|\[::1\]|::1)$/i.test(location.hostname);
 // layout.js applies the mode and platform before the header can paint.
-// Gateway mode (gatewaymode.go): magpie web serving only other computers'
-// agents leaves out this one's agents' pages (Agents, the Library but MCP)
-// and settings, until Settings › General turns it off.
+// Gateway mode hides local agents in magpie web.
 let gatewayMode = web && !!window.bootPrefs?.gateway;
 const GATEWAY_HIDES = ["agents"];
-// Plugins › Built-in (builtins.go, Lxxyx): the window's parts switched off,
-// by id. data-feature="<id>" leaves by a style while off; its tab leaves the
-// nav (navHides), a link opens Agents (show), Settings skips its rows.
-// boot.js says which before paint, applyFeatures after. data-feature-off is
-// there only while off: where a page says what went (bigbenniu).
+const edition = window.bootPrefs?.edition;
+const enterpriseDesktop = edition === "enterprise-desktop";
+const panelAllowances = mode === "panel" && !enterpriseDesktop;
+const localUsageScope = "Gateway and session-log calls on this computer; local rejections excluded from totals.";
+const enterpriseHides = (v) => !!edition && (["plugins", "library", "sessions"].includes(v) || enterpriseDesktop && v === "gateway");
+// data-feature hides a disabled feature; data-feature-off shows its fallback.
 let featuresOff = new Set(window.bootPrefs?.featuresOff || []);
 const featureSel = () => [...featuresOff].map((id) => `[data-feature~="${id}"]`).join(",");
 const featureHides = (n) => { const sel = featureSel(); return !!sel && !!n?.closest(sel); };
@@ -85,6 +84,11 @@ let backTo = null, jumpNext = false; // Back (jumpFrom)
 let showAllAgents = false; // the agents no one has set anything on, folded away
 let showHiddenAgents = false; // under them, the ones hidden by hand: a fold of their own, shut until asked
 let period = "today"; // usage window
+
+// The reader's time zone for the ledger's dates and the chart's hours.
+function usageZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; }
+}
 let usage = null;   // last usage summary
 let pick = null; // { agent, field, options, items, cursor, anchor }
 let editing = null; // provider id being edited; { preset } or { custom: true } for a new one
@@ -2692,13 +2696,8 @@ function goneSaid(a) {
 let installsOpen = null; // null: as the list has it (open with no agents)
 const VIA = { script: "Installer", powershell: "PowerShell", brew: "Homebrew", npm: "npm" };
 
-let pluginAgents = []; // the names of the agents a suggested plugin adds, not installed
-
 async function loadInstalls() {
   if (mode === "panel") return;
-  // the plugins' agents come from the market, which may be fetched: the
-  // commands aren't held for them
-  api("plugins/agents").then((r) => { pluginAgents = Array.isArray(r) ? r : []; paintInstalls(); }, () => {});
   let r;
   try { r = await api("agents/install"); } catch { return; } // it just isn't shown
   installInfo = Array.isArray(r) ? r : [];
@@ -2735,7 +2734,7 @@ function paintInstalls() {
   // one listed above by its settings alone, its CLI gone (#843), is
   // offered again too
   const items = installInfo.filter((x) => x.missing || !here.has(x.id));
-  if (!items.length && !pluginAgents.length) { box?.remove(); return; }
+  if (!items.length) { box?.remove(); return; }
   if (!box) {
     box = el("section", "ag-install");
     box.id = "agentsInstall";
@@ -2781,32 +2780,10 @@ function paintInstalls() {
   }
   // the agents plugins add, installed from Plugins as every plugin is: in
   // sight with the commands folded (the owner: not folded away with them)
-  if (pluginAgents.length) parts.push(pluginAgentsRow());
   box.replaceChildren(...parts);
 }
 
-function pluginAgentsRow() {
-  const r = el("button", "ag-install-row ag-install-plugins");
-  r.type = "button";
-  const who = el("div", "ag-install-who");
-  const ic = el("span", "puzzle");
-  ic.append(svg(PUZZLE, 15, 1.4));
-  const name = el("span", "ag-install-name");
-  name.append(el("b", "", t("More in Plugins")));
-  who.append(ic, name);
-  const names = el("span", "ag-install-pnames", pluginAgents.join(t(", ")));
-  r.append(who, names, el("span", "chev", svg(CHEV_R, 11, 1.6)));
-  r.title = t("Agents magpie has no setup of its own for: install a plugin for one in the Plugins tab, and it is listed here");
-  r.onclick = (e) => openPluginAgents(e);
-  return r;
-}
 
-// openPluginAgents: the Plugins tab, at its Agents
-async function openPluginAgents(e) {
-  if (mode !== "window") { api("window/main?view=plugins", {}).catch(() => {}); return; }
-  if (!await show("plugins")) return;
-  window.pluginAgentsTo?.(e);
-}
 
 // ---------- the agents' order, and the ones put away ----------
 // Kept in magpie's own settings (agentOrder, agentsHidden, agentsShown),
@@ -4234,7 +4211,7 @@ async function load(again) {
     const since = prefsWrites, hid = hiddenIds().join(), visibilitySince = agentsVisibilityRevision;
     const asked = api("state");
     // the panel's allowances asked beside the state, not after it (#3134)
-    const early = mode === "panel" && !load.done;
+    const early = panelAllowances && !load.done;
     if (early) panelQuotasNow(again);
     // the first load draws the state kept from the last read while the
     // fresh one (seconds, #1519) is read; an agent leaves only once that says so
@@ -4247,7 +4224,7 @@ async function load(again) {
         tintPanel();
         tintTitleBar();
         renderAgents();
-        if (mode === "panel") renderPanelQuota(true);
+        if (panelAllowances) renderPanelQuota(true);
       }
     }
     let next = await asked;
@@ -4284,7 +4261,11 @@ async function load(again) {
     loadInstalls();
     // the Providers page made ready behind the one shown (#1519)
     if (mode !== "panel" && !(view === "providers" || providersPage(view))) prefetchProviders();
-    if (mode === "panel") { renderPanelQuota(true); if (!early) panelQuotasNow(again); panelAccounts(); }
+    if (panelAllowances) {
+      renderPanelQuota(true);
+      if (!early) panelQuotasNow(again);
+    }
+    if (mode === "panel") panelAccounts();
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || providersPage(view)) && !(editing || adding)) await loadProviders();
@@ -4296,14 +4277,13 @@ async function load(again) {
     if (view === "masking") await magpie.call("masking", "refresh", again);
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
-    if (view === "settings" && !syncOpen) await loadSettings();
+    if (view === "settings") await loadSettings();
   } catch (e) {
     statusErr(e);
   }
   renderUpdateBadge();
   cliBehindOnce();
   if (state?.configBlocked && !configBlockedAsked && $("#modal").hidden) configBlockedAsk(state.configBlocked);
-  whatsNewOnce();
   recoveredOnce();
 }
 
@@ -4342,7 +4322,7 @@ function updatePath(p) {
 
 // input: in use, so an update waits (inUseAt)
 let usedAt = 0, usedOpen;
-for (const k of "pointerdown keydown input wheel".split(" ")) addEventListener(k, () => {
+if (!edition) for (const k of "pointerdown keydown input wheel".split(" ")) addEventListener(k, () => {
   const open = $("#modal")?.hidden === false, now = Date.now();
   if (now - usedAt < 2e4 && open === usedOpen) return;
   usedAt = now, usedOpen = open;
@@ -4353,6 +4333,7 @@ for (const k of "pointerdown keydown input wheel".split(" ")) addEventListener(k
 // downloaded or out; Settings or its × keeps it away.
 
 async function renderUpdateBadge() {
+  if (edition) return;
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
   if (servedAnew(u)) return;
@@ -6164,10 +6145,14 @@ function renderProviders(quiet) {
     if (open) dialog = renderEditor(p);
   }
   findProviders();
-  renderExcluded();
   renderFileError();
-  renderMovable();
-  renderProviderDiscovery();
+  if (enterpriseDesktop) {
+    $("#pvMask")?.remove();
+  } else {
+    renderExcluded();
+    renderMovable();
+    renderProviderDiscovery();
+  }
   dialog = renderAdd() || dialog;
   if (importing) dialog = renderImport(importing);
   if (importingApps) dialog = renderImportApps(importingApps);
@@ -6449,7 +6434,7 @@ function discoveryOffLine() {
   const acts = el("div", "dep-acts");
   const go = el("button", "text action", t("Settings › Privacy"));
   go.onclick = (e) => openSettingsAt(e, "privacy", "#discoveryList .row");
-  acts.append(go);
+  if ($("#discoveryList")) acts.append(go);
   card.append(el("span", "dep-dot"), body, acts);
   return card;
 }
@@ -7085,11 +7070,7 @@ function renderAdd() {
   const focusPick = hadFocus && active.closest("[data-pick]")?.dataset.pick;
   const selection = hadFocus && active.matches(".find") ? [active.selectionStart, active.selectionEnd] : null;
   sheet.replaceChildren();
-  // A sheet put away by a redraw rather than rolled up (a sign-in done
-  // opens its account's editor, an import or an action closes it) takes
-  // what it held with it, as closeAddSheet does: a click in it still held
-  // the page where the sheet had been, and the room made for that was left
-  // under a list now ending far above it — the page blank (#509).
+  // Release the reserved scroll space if a redraw closes the sheet (#509).
   if (!adding && !sheet.hidden) {
     const view = $("#view-providers");
     if (held?.v === view) held = null;
@@ -7116,11 +7097,11 @@ function renderAdd() {
   c.dataset.pick = "custom";
   c.title = t("any OpenAI or Anthropic compatible URL");
   c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
-  head.append(q, c);
+  if (!enterpriseDesktop) head.append(q, c);
   const imp = el("button", "text", t("Import…"));
   imp.title = t("Bring over providers set up in other apps");
   imp.onclick = openImportApps;
-  head.append(imp);
+  if (!edition) head.append(imp);
   if (providers.providers.length) {
     const x = el("button", "text", t("Close"));
     x.onclick = closeAddSheet;
@@ -7131,6 +7112,15 @@ function renderAdd() {
   sheet.append(tiles);
   const drawTiles = () => {
     tiles.replaceChildren();
+    if (enterpriseDesktop) {
+      const remote = providers.presets.find((p) => p.id === "remote-magpie");
+      if (remote) {
+        const grid = el("div", "grid");
+        grid.append(tile(remote));
+        tiles.append(grid);
+      }
+      return;
+    }
     const f = presetQuery.trim().toLowerCase();
     // the note is found in the words it is shown in, too (远程 for Remote magpie)
     const hit = (pr) => !f || pr.name.toLowerCase().includes(f) || pr.id.includes(f) || hostOf(pr.chat || pr.responses || pr.anthropic).includes(f) || (pr.note || "").toLowerCase().includes(f) || (pr.note ? t(pr.note).toLowerCase().includes(f) : false);
@@ -7411,6 +7401,7 @@ function countPartner(what, ids) {
 // and a still one on Providers in the nav, as Plugins has for an update
 // (yetone: 侧边栏…不要太打扰用户)
 function markNewPartners() {
+  if (enterpriseDesktop) return;
   const list = providers || providersEarly?.got;
   const fresh = adding ? [] : (list?.presets || []).filter((p) => p.kind === "partner" && p.new && !p.added && partnerShown(p));
   const title = fresh.length ? t("New in Partners: {names}", { names: fresh.map((p) => p.name).join(", ") }) : "";
@@ -9751,7 +9742,7 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Name"), name), ...field(t("ID"), idIn));
   }
   // off when added
-  if ((p?.preset || pr?.id) === "remote-magpie" && !p?.account) {
+  if (!edition && (p?.preset || pr?.id) === "remote-magpie" && !p?.account) {
     const [l, c] = tick(t("Add its MCP servers to the Library"), (draft.libraryMCP ??= !!p?.libraryMCP));
     l.classList.add("library-mcp");
     c.onchange = () => (draft.libraryMCP = c.checked);
@@ -10519,7 +10510,7 @@ function fetchImportIcon(p, head, ed) {
 // Scan off the loading path, at most once a minute; an import forces one,
 // and an older response can't bring the hint back.
 async function discoverLocalProviders(force = false) {
-  if (mode !== "window" || view !== "providers" || providers?.fileError) return;
+  if (edition || mode !== "window" || view !== "providers" || providers?.fileError) return;
   if (!force && (discoveryPending || Date.now() - discoveryAt < 60000)) return;
   const run = ++discoveryRun;
   discoveryPending = true;
@@ -11565,7 +11556,7 @@ function renderModels(p) {
     sfx.drawnAgain = sayLabel;
     const where = el("button", "text action", t("Change in Settings"));
     where.type = "button";
-    where.hidden = gatewayMode; // Settings has no such row then
+    where.hidden = gatewayMode || !$("#plainNamesSegs");
     where.onclick = (e) => openSettingsAt(e, "general", $("#plainNamesSegs").closest(".row"));
     sfx.append(sfxSaid, el("span", "where", t("“Provider in model names” is one setting for every provider")), where);
     sfx.append(noNamesLine("span", "said"));
@@ -13078,7 +13069,7 @@ function renderSigning(sub) {
       : signing.code && sub.agent === "factory" ? t("magpie opened Factory's sign-in page. Check it shows this code and confirm it; the account shows up here as soon as you're done.")
       : signing.code ? t("magpie opened GitHub's device page. Enter this code there; the account shows up here as soon as you're done.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")));
   // "as set in Settings" leads there: Privacy's Sign-in pages
-  if (signing.state !== "starting" && signing.linkOnly && !signing.opened) {
+  if (signing.state !== "starting" && signing.linkOnly && !signing.opened && $("#signInOpenList")) {
     const go = el("button", "text", t("Settings") + " ›");
     go.type = "button";
     go.onclick = (e) => openSettingsAt(e, "privacy", "#signInOpenRow");
@@ -15854,7 +15845,7 @@ let quotas = null;
 let quotasAt = 0; // when they came in
 // the panel's last read, drawn at once, turning, until the read lands (#3160)
 let quotasKept = false;
-if (mode === "panel") { const none = [], k = kept("panelQuotas", none); if (k !== none) { quotas = k; quotasKept = true; } }
+if (panelAllowances) { const none = [], k = kept("panelQuotas", none); if (k !== none) { quotas = k; quotasKept = true; } }
 let quotaHist = []; // each account's windows over time, for the curves (#651)
 // quotasOpened: the reader opened what shows the allowances (the Usage
 // page's Overview, the tray panel's Allowances tab, a menu bar cell, either
@@ -17253,7 +17244,7 @@ function focusQuotaCard() {
 
 // Go calls this when a menu-bar quota cell opens the panel.
 function panelQuotaFocus(id) {
-  if (mode !== "panel") return;
+  if (!panelAllowances) return;
   quotaFocus = id;
   quotaFocusUntil = performance.now() + 5000;
   // a cell for a subscription the tab hides shows its card all the same
@@ -17281,6 +17272,10 @@ function panelUseFocus(per) {
 
 if (mode === "panel") {
   const tabs = $("#ptabs");
+  if (!panelAllowances) {
+    tabs.querySelector('[data-ptab="usage"]').remove();
+    $("#panelQuota").remove();
+  }
   tabs.hidden = false;
   tabs.setAttribute("role", "tablist");
   for (const b of tabs.querySelectorAll("button")) {
@@ -17307,6 +17302,18 @@ try {
 } catch {}
 let panelUseAt = 0;
 
+function panelUseParams() {
+  const q = new URLSearchParams({ period: panelUsePeriod, limit: "1" });
+  if (panelUseProvider) q.set("provider", panelUseProvider);
+  if (enterpriseDesktop) {
+    q.set("computer", "this");
+    const zone = usageZone();
+    if (zone) q.set("tz", zone);
+  } else if (panelUseComputer) q.set("computer", panelUseComputer);
+  if (panelUseDay) q.set("day", panelUseDay);
+  return q.toString();
+}
+
 // One read at a time; one asked for meanwhile is served after, so a pick is
 // never dropped. quiet (the timer or a reopen asked): nothing dims, and it
 // is drawn again only when it changed, so the chart doesn't blink.
@@ -17314,11 +17321,7 @@ let panelUseFlight = null, panelUseQueued = false, panelUseQueuedLoud = false;
 function loadPanelUse(quiet = false) {
   if (mode !== "panel") return Promise.resolve();
   if (panelUseFlight) { panelUseQueued = true; panelUseQueuedLoud = panelUseQueuedLoud || !quiet; return panelUseFlight; }
-  const q = new URLSearchParams({ period: panelUsePeriod, limit: "1" });
-  if (panelUseProvider) q.set("provider", panelUseProvider);
-  if (panelUseComputer) q.set("computer", panelUseComputer);
-  if (panelUseDay) q.set("day", panelUseDay);
-  const want = q.toString();
+  const want = panelUseParams();
   panelUseAt = performance.now();
   // what is shown stays, dimmed, till the answer comes: the panel doesn't
   // shrink to a skeleton and lose where it was scrolled to
@@ -17326,11 +17329,7 @@ function loadPanelUse(quiet = false) {
   const read = async () => {
     try {
       const l = await api("usage/requests?" + want);
-      const now = new URLSearchParams({ period: panelUsePeriod, limit: "1" });
-      if (panelUseProvider) now.set("provider", panelUseProvider);
-      if (panelUseComputer) now.set("computer", panelUseComputer);
-      if (panelUseDay) now.set("day", panelUseDay);
-      if (now.toString() !== want) return; // another period or provider was picked meanwhile
+      if (panelUseParams() !== want) return; // another period or provider was picked meanwhile
       const same = !!panelUse && JSON.stringify(l) === JSON.stringify(panelUse);
       panelUse = l;
       $("#panelUsage").classList.remove("pu-loading");
@@ -17403,7 +17402,13 @@ function renderPanelUse() {
   open.type = "button";
   open.dataset.feature = "usage"; // it opens on the Usage page
   open.onclick = (e) => {
-    api("window/main?" + new URLSearchParams({ view: "usage", tab: "requests", ...(panelUseProvider ? { provider: panelUseProvider } : {}), ...(panelUseComputer ? { computer: panelUseComputer } : {}) }), {});
+    const q = new URLSearchParams({ view: "usage", tab: "requests" });
+    if (panelUseProvider) q.set("provider", panelUseProvider);
+    if (enterpriseDesktop) {
+      q.set("period", panelUsePeriod);
+      if (panelUseDay) q.set("day", panelUseDay);
+    } else if (panelUseComputer) q.set("computer", panelUseComputer);
+    api("window/main?" + q, {}).catch(statusErr);
     e.currentTarget.blur();
   };
   // as the window's Usage has it: what is shown read again now
@@ -17419,7 +17424,7 @@ function renderPanelUse() {
     loadPanelUse().catch(() => {}).finally(() => setTimeout(() => $("#panelUsage .pu-again")?.classList.remove("spin"), 300));
   };
   bar.append(per, ...(copts.length ? [comp] : []), pick, el("span", "grow"), again, open);
-  const out = [bar, el("p", "usage-note", t("Gateway and session-log calls; local rejections excluded from totals."))];
+  const out = [bar, el("p", "usage-note", t(enterpriseDesktop ? localUsageScope : "Gateway and session-log calls; local rejections excluded from totals."))];
   if (!l) {
     out.push(el("span", "skeleton pu-sk"), el("span", "skeleton pu-sk"));
   } else if (!l.total && !l.day) {
@@ -17493,8 +17498,8 @@ function renderPanelUse() {
 // lazy: kept while nothing it draws from changed (#3192); the minute is in
 // it, for the deadlines it words by the clock.
 function renderPanelQuota(lazy) {
+  if (!panelAllowances) return;
   const box = $("#panelQuota");
-  if (mode !== "panel" || !box) return;
   const drawn = JSON.stringify([quotas, quotaHistV, quotaLeft, quotaRange, [...panelOptsFolded], state?.settings, locale, panelTab, panelPeek, panelArranging, panelZeroOpen, usageArranging, panelAcctsKey(), Math.floor(Date.now() / 60e3)]);
   if (lazy && renderPanelQuota.drawn === drawn) return;
   renderPanelQuota.drawn = drawn;
@@ -18770,7 +18775,7 @@ function quotaWindows(sub) {
 // together, and each other one, as sync shares their usage (#542); none
 // while no other computer's is here.
 function computerOpts(cs) {
-  if (!cs?.length) return [];
+  if (enterpriseDesktop || !cs?.length) return [];
   const others = cs.filter((c) => c.id !== "this");
   return [{ v: "this", name: t("This computer"), note: "" },
     ...(others.length > 1 ? [{ v: "others", name: t("Other computers"), note: "" }] : []),
@@ -19589,19 +19594,13 @@ async function setGatewayPaused(on) {
 }
 async function loadSettings() {
   const since = prefsWrites;
-  if (fontList === null && !fontListError) loadFonts();
-  if (window.bootPrefs?.omarchy && !barIcon) api("omarchy/widget").then((b) => { barIcon = b; renderBarIcon(); }).catch(() => {});
+  if (!edition && fontList === null && !fontListError) loadFonts();
+  if (!edition && window.bootPrefs?.omarchy && !barIcon) api("omarchy/widget").then((b) => { barIcon = b; renderBarIcon(); }).catch(() => {});
   const s = await api("settings");
   if (!prefsSettled(since) && prefs) return; // the save draws the page when it's in
   // the state's copy too, which the other pages draw from (#1433)
   prefs = state.settings = s;
   applyFeatures(s.builtins);
-  // the WebDAV setup can have been changed from outside the window (magpie
-  // webdav at the terminal): the page's copy of it is dropped, so the page
-  // is drawn from a fresh read. Coming back to the window is safe with a
-  // form open: load() keeps off this path while one is, so it is never
-  // rebuilt under whoever is typing in it
-  syncView = null;
   // gateway mode turned in another tab, or the agents here come and gone
   if (web && !!s.gatewayOn !== gatewayMode) setGatewayMode(!!s.gatewayOn);
   renderSettings();
@@ -19722,7 +19721,16 @@ function tabKeys(tabs, sel) {
 // Settings: a tab per part (#471), kept in the address (?tab=privacy) and
 // remembered; a part with no row here has none. A click leaves the page
 // where it is; picked in the sidebar, a part opens at its top (navSubs).
-const SET_TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "plugins", "about"];
+if (edition) {
+  const scope = enterpriseDesktop ? "desktop" : "server";
+  for (const node of $("#view-settings").querySelectorAll("[data-setting-scope]")) {
+    if (node.dataset.settingScope !== scope) node.remove();
+  }
+  const tab = $(enterpriseDesktop ? "#setTab-network" : "#setTab-usage");
+  tab.dataset.en = enterpriseDesktop ? "Network" : "Usage";
+  tab.textContent = t(tab.dataset.en);
+}
+const SET_TABS = [...$("#setTabs").querySelectorAll("[data-set]")].map((tab) => tab.dataset.set);
 let setTab = "general";
 try { const k = localStorage.getItem("magpie.settingsTab"); if (SET_TABS.includes(k)) setTab = k; } catch {}
 let setShown = setTab; // the part shown: the one picked, or the first there
@@ -19753,8 +19761,6 @@ function setSetTab(tab, remember) {
     $("#setPage-" + id).hidden = !on;
   }
   setShown = tab;
-  // each agent's row is read only where it is shown
-  if (view === "settings" && tab === "privacy" && !setQuery) loadSessionReads();
   $("#setTabs").setAttribute("aria-label", t("Settings"));
   $("#setQ").setAttribute("aria-label", t("Find a setting"));
   if (view === "settings") syncURL();
@@ -19783,7 +19789,7 @@ function setSetTab(tab, remember) {
 // English, by their text, section heading or part name; Escape restores.
 const setText = (n) => [n.textContent, ...[...n.querySelectorAll("[data-en]")].map((e) => e.dataset.en)].join(" ").toLowerCase();
 function findSettings() {
-  if (!provLinksDrawn && setQuery) provLinksDraw();
+  if (!edition && !provLinksDrawn && setQuery) provLinksDraw();
   const v = $("#view-settings");
   v.classList.add("set-searching");
   const words = setQuery.split(/\s+/);
@@ -19826,8 +19832,10 @@ function findSettings() {
     any ||= hits > 0;
   }
   // the built-ins that match (setfeats.js)
-  if (window.setFeatsFind) any = setFeatsFind(words) > 0 || any;
-  else import("./setfeats.js").then(() => setQuery && findSettings(), () => {});
+  if (!edition) {
+    if (window.setFeatsFind) any = setFeatsFind(words) > 0 || any;
+    else import("./setfeats.js").then(() => setQuery && findSettings(), () => {});
+  }
   const none = $("#setNone");
   none.hidden = any;
   none.textContent = t("No setting matches “{q}”", { q: $("#setQ").value.trim() });
@@ -19977,42 +19985,82 @@ function renderSettings() {
   const s = prefs;
   const keep = prefsKeep(s);
   prefsBase = keep;
-  renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
   $("#colorblindSegs").title = t("Colorblind-safe chart colors, and each allowance window's line in a dash of its own");
   $("#colorblindSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.colorblind ? "on" : "off", (v) => savePrefs({ ...keep, colorblind: v === "on" })));
   $("#reduceMotionSegs").title = t("Animations stand still, as with the system's Reduce Motion, so magpie keeps the computer less busy");
   $("#reduceMotionSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.reduceMotion ? "on" : "off", (v) => savePrefs({ ...keep, reduceMotion: v === "on" })));
-  $("#birdSegs").title = t("magpie's bird hops on what is still loading; Off keeps it away, and magpie stops looking for it");
-  $("#birdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noBird ? "off" : "on", (v) => savePrefs({ ...keep, noBird: v === "off" })));
   renderLangPick(s, keep);
-  renderGatewayMode(s);
+  if (!edition) {
+    renderFonts(s);
+    $("#birdSegs").title = t("magpie's bird hops on what is still loading; Off keeps it away, and magpie stops looking for it");
+    $("#birdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noBird ? "off" : "on", (v) => savePrefs({ ...keep, noBird: v === "off" })));
+    renderGatewayMode(s);
+    $("#traySegs").replaceChildren(segs(TRAYS.map(([id, name]) => [id, t(name)]), s.tray || "panel", (tray) => savePrefs({ ...keep, tray })));
+    renderPanelKey(s);
+    // the Dock is the Mac's; the tray and the login item the app's
+    $("#dockRow").hidden = !document.body.classList.contains("mac");
+    $("#traySegs").parentElement.hidden = web;
+    $("#dockSegs").replaceChildren(segs([["off", t("Hide")], ["window", t("With window")], ["on", t("Show")]],
+      dockChoice(s), (v) => savePrefs({ ...keep, dock: v === "on", dockWindow: v === "window", dockNever: v === "off" })));
+    // a closed window's webview let go (#580): the app's windows alone
+    $("#lightweightRow").hidden = web;
+    $("#lightweightSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.lightweight === true ? "on" : "off",
+      (v) => savePrefs({ ...keep, lightweight: v === "on" })));
+    // the display kept on too (#975)
+    $("#keepAwakeSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")], ["display", t("Screen on too")]],
+      !s.keepAwake ? "off" : s.keepAwakeDisplay ? "display" : "on",
+      (v) => savePrefs({ ...keep, keepAwake: v !== "off", keepAwakeDisplay: v === "display" })));
+    // its line says what it does; data-en keeps it on a language change
+    const awakeSub = $("#keepAwakeRow .sub");
+    awakeSub.dataset.en = s.keepAwake && s.keepAwakeDisplay
+      ? "Keeps this computer and its screen awake while magpie runs tasks"
+      : "Keeps this computer awake while magpie runs tasks";
+    awakeSub.textContent = t(awakeSub.dataset.en);
+    renderBarIcon();
+  }
+  if (!edition || enterpriseDesktop) renderLocalSettings(s, keep);
+
+  if (!enterpriseDesktop) renderProviderPreferences(s);
+  if (!edition) renderTrayUsage(s, keep);
+  else if (enterpriseDesktop) renderAgentPrefs();
+  else renderUsagePreferences(s, keep);
+
+  renderProxy(s, keep);
+  window.renderSavedProxies ? renderSavedProxies(s) : import("./proxies.js").then(() => renderSavedProxies(s), () => {});
+  renderPort(s);
+  if (!edition) {
+    renderGitHubToken(s);
+    renderImages(s, keep);
+    renderDiscovery(s, keep);
+  }
+  if (!enterpriseDesktop) {
+    renderReplies(s, keep);
+    renderDisabledModels(s);
+    renderRedact(s, keep);
+    renderBareIds(s);
+    renderLAN(s);
+    renderAllow(s);
+    renderMTLS(s);
+    renderHTTPS(s);
+    renderCORS(s);
+  }
+
+  renderSettingsAbout(s, keep);
+  if (!edition) {
+    // gateway mode leaves out what is written into this computer's agents'
+    // files, and the alerts its desktop would show
+    for (const r of [$("#plainNamesSegs").parentElement, $("#alertHead"), $("#alertList")]) r.hidden = gatewayMode;
+  }
+  setSetTab(setTab);
+}
+
+function renderLocalSettings(s, keep) {
   // a browser tab has its own zoom, and magpie leaves it to it
   $("#textSizeRow").hidden = web;
   // the keys that do it too, in the choices' tooltip
   $("#textSizeSegs").title = t("Everything in magpie's windows, larger; {keys} too", { keys: textSizeKeys() });
   $("#textSizeSegs").replaceChildren(segs(TEXT_SIZES.map((n) => [n, n + "%"]), s.textSize || 100, (n) => setTextSize(n)));
-  $("#traySegs").replaceChildren(segs(TRAYS.map(([id, name]) => [id, t(name)]), s.tray || "panel", (tray) => savePrefs({ ...keep, tray })));
-  renderPanelKey(s);
-  // the Dock is the Mac's; the tray and the login item the app's
-  $("#dockRow").hidden = !document.body.classList.contains("mac");
-  $("#traySegs").parentElement.hidden = $("#loginSegs").parentElement.hidden = web;
-  $("#dockSegs").replaceChildren(segs([["off", t("Hide")], ["window", t("With window")], ["on", t("Show")]],
-    dockChoice(s), (v) => savePrefs({ ...keep, dock: v === "on", dockWindow: v === "window", dockNever: v === "off" })));
-  // a closed window's webview let go (#580): the app's windows alone
-  $("#lightweightRow").hidden = web;
-  $("#lightweightSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.lightweight === true ? "on" : "off",
-    (v) => savePrefs({ ...keep, lightweight: v === "on" })));
-  // the display kept on too (#975)
-  $("#keepAwakeSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")], ["display", t("Screen on too")]],
-    !s.keepAwake ? "off" : s.keepAwakeDisplay ? "display" : "on",
-    (v) => savePrefs({ ...keep, keepAwake: v !== "off", keepAwakeDisplay: v === "display" })));
-  // its line says what it does; data-en keeps it on a language change
-  const awakeSub = $("#keepAwakeRow .sub");
-  awakeSub.dataset.en = s.keepAwake && s.keepAwakeDisplay
-    ? "Keeps this computer and its screen awake while magpie runs tasks"
-    : "Keeps this computer awake while magpie runs tasks";
-  awakeSub.textContent = t(awakeSub.dataset.en);
   // the gateway paused (me2seeks on X): agents disconnected and nothing
   // listening, without quitting magpie (gatewaypause.go)
   $("#gatewayPauseSegs").replaceChildren(segs([["on", t("On")], ["paused", t("Paused")]], s.gatewayPaused ? "paused" : "on",
@@ -20023,8 +20071,7 @@ function renderSettings() {
   $("#wslAgentsRow").hidden = !s.wsl;
   $("#wslAgentsSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noWSLAgents ? "off" : "on",
     (v) => savePrefs({ ...keep, noWSLAgents: v === "off" })));
-  renderSessionTerminal(s, keep);
-  renderBarIcon();
+  $("#loginRow").hidden = web;
   // what it does in its tooltip (#2120), and where the Mac lists it
   $("#loginRow .who").title = t(document.body.classList.contains("mac")
     ? "Opens in the menu bar with no window. System Settings › General › Login Items lists it under App Background Activity, not Open at Login"
@@ -20033,6 +20080,9 @@ function renderSettings() {
   $("#loginSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.login ? "on" : "off", (v) =>
     prefWrite(api("settings/login", { on: v === "on" }))));
   renderLoginAllow(s);
+}
+
+function renderProviderPreferences(s) {
   homeProvPrefRows();
   // A ChatGPT account's next window started as soon as the last resets
   $("#warmSegs").replaceChildren(segs([["off", t("Off")], ["week", t("Weekly")], ["all", t("Weekly and 5-hour")]],
@@ -20071,27 +20121,9 @@ function renderSettings() {
   }
   // and the plugins that check in themselves, a group each
   renderPluginCheckins(s);
-  renderTrayUsage(s, keep);
-  renderProxy(s, keep);
-  window.renderSavedProxies ? renderSavedProxies(s) : import("./proxies.js").then(() => renderSavedProxies(s), () => {});
-  renderGitHubToken(s);
-  renderImages(s, keep);
-  renderSearch(s, keep);
-  renderReplies(s, keep);
-  renderDisabledModels(s);
-  renderRedact(s, keep);
-  renderDiscovery(s, keep);
-  renderSessionReads(s);
-  renderOTel(s, keep);
-  renderPort(s);
-  renderBareIds(s);
-  renderLAN(s);
-  renderAllow(s);
-  renderMTLS(s);
-  renderHTTPS(s);
-  renderCORS(s);
-  renderSync();
+}
 
+function renderSettingsAbout(s, keep) {
   const about = $("#about");
   about.replaceChildren();
   const row = (name, sub, value, ...tools) => {
@@ -20106,73 +20138,76 @@ function renderSettings() {
     about.append(r);
     return r;
   };
-  renderUpdate(row(t("Version"), "", s.version));
-  // what changed in this version, and in one waiting; a build from source
-  // has no notes
-  if (/^v?\d+\.\d+\.\d+$/.test(s.version || "")) {
-    const notes = el("button", "text", t("Open"));
-    notes.onclick = () => openWhatsNew(notes);
-    row(t("What's new"), t("The release notes since the last update"), "", notes).classList.add("whatsnew-row");
+  const versionRow = row(t("Version"), "", s.version);
+  if (!edition) {
+    renderUpdate(versionRow);
+    // what changed in this version, and in one waiting; a build from source
+    // has no notes
+    if (/^v?\d+\.\d+\.\d+$/.test(s.version || "")) {
+      const notes = el("button", "text", t("Open"));
+      notes.onclick = () => openWhatsNew(notes);
+      row(t("What's new"), t("The release notes since the last update"), "", notes).classList.add("whatsnew-row");
+    }
+    // the header's Update pill, kept away for good or for one version; the
+    // version row above still says what is out and offers it
+    const pill = row(t("Update button"), t("Shows in the header when a newer magpie is out"),
+      "", segs([["off", t("Off")], ["on", t("On")]], s.noUpdatePill ? "off" : "on", (v) => savePrefs({ ...keep, noUpdatePill: v === "off" }).then(renderUpdateBadge)));
+    pill.classList.add("update-pill-row");
+    if (s.updateSkip && !s.noUpdatePill) {
+      api(updatePath("update")).then((u) => {
+        if (!pill.isConnected || !u || u.latest !== s.updateSkip) return;
+        pill.querySelector(".sub").textContent = t("Hidden for {v} until a newer version is out", { v: u.latest });
+        const back = el("button", "text", t("Show again"));
+        back.onclick = () => skipUpdate("");
+        pill.querySelector(".val").prepend(back);
+      }, () => {});
+    }
+    // whether magpie asks for a newer version by itself, and how often;
+    // off, only the version row's Check asks (#472)
+    row(t("Automatic updates"), t("Checks for a newer magpie by itself"),
+      "", segs([["off", t("Off")], ["on", t("On")]], s.noAutoUpdate ? "off" : "on", (v) => savePrefs({ ...keep, noAutoUpdate: v === "off" }))).classList.add("update-auto-row");
+    // kept in place while off, dimmed, its height the same (a row or a line
+    // taken away would shorten the page under the click), for when they are
+    // turned on again
+    row(t("Check every"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
+      segs(UPDATE_EVERY.map((m) => [m, m < 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 })]), s.updateEvery || 360,
+        (updateEvery) => savePrefs({ ...keep, updateEvery }))).classList.add("update-every-row", ...(s.noAutoUpdate ? ["off"] : []));
+    // which versions an update offers (ssharpcc on X): every one as it comes
+    // out, or Stable, one a week and an urgent one at once, chosen by the
+    // update feed. It holds for the version row's Check too, so it stays lit
+    // with automatic updates off.
+    row(t("Update channel"), s.updateChannel === "stable"
+      ? t("One version a week, out for three days first, and urgent fixes at once. What's new lists every change since yours")
+      : t("Every version as soon as it is out"), "",
+      segs([["every", t("Every version")], ["stable", t("Stable")]], s.updateChannel === "stable" ? "stable" : "every",
+        (v) => savePrefs({ ...keep, updateChannel: v === "stable" ? "stable" : "" }))).classList.add("update-channel-row");
+    // whether a newer version found is downloaded at once, or only said to
+    // be out and downloaded on a click (#2296): a metered network or a
+    // proxy billed by traffic. It holds for the version row's Check too.
+    row(t("Download updates automatically"), s.noAutoDownload
+      ? t("Off: a newer version is only shown, with its size; it downloads when you click Download update. For metered networks and proxies billed by traffic")
+      : t("Downloads a newer version as soon as it is found. Turn off on a metered network or a proxy billed by traffic"), "",
+      segs([["off", t("Off")], ["on", t("On")]], s.noAutoDownload ? "off" : "on", (v) => savePrefs({ ...keep, noAutoDownload: v === "off" }))).classList.add("update-download-row");
+    row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it without cutting off an agent's request"), "",
+      segs([["off", t("Off")], ["on", t("On")]], s.autoRestart ? "on" : "off", (v) => savePrefs({ ...keep, autoRestart: v === "on" }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
+    renderUpdateMirror(row(t("Download source"), "", ""), s);
   }
-  // the header's Update pill, kept away for good or for one version; the
-  // version row above still says what is out and offers it
-  const pill = row(t("Update button"), t("Shows in the header when a newer magpie is out"),
-    "", segs([["off", t("Off")], ["on", t("On")]], s.noUpdatePill ? "off" : "on", (v) => savePrefs({ ...keep, noUpdatePill: v === "off" }).then(renderUpdateBadge)));
-  pill.classList.add("update-pill-row");
-  if (s.updateSkip && !s.noUpdatePill) {
-    api(updatePath("update")).then((u) => {
-      if (!pill.isConnected || !u || u.latest !== s.updateSkip) return;
-      pill.querySelector(".sub").textContent = t("Hidden for {v} until a newer version is out", { v: u.latest });
-      const back = el("button", "text", t("Show again"));
-      back.onclick = () => skipUpdate("");
-      pill.querySelector(".val").prepend(back);
-    }, () => {});
-  }
-  // whether magpie asks for a newer version by itself, and how often;
-  // off, only the version row's Check asks (#472)
-  row(t("Automatic updates"), t("Checks for a newer magpie by itself"),
-    "", segs([["off", t("Off")], ["on", t("On")]], s.noAutoUpdate ? "off" : "on", (v) => savePrefs({ ...keep, noAutoUpdate: v === "off" }))).classList.add("update-auto-row");
-  // kept in place while off, dimmed, its height the same (a row or a line
-  // taken away would shorten the page under the click), for when they are
-  // turned on again
-  row(t("Check every"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
-    segs(UPDATE_EVERY.map((m) => [m, m < 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 })]), s.updateEvery || 360,
-      (updateEvery) => savePrefs({ ...keep, updateEvery }))).classList.add("update-every-row", ...(s.noAutoUpdate ? ["off"] : []));
-  // which versions an update offers (ssharpcc on X): every one as it comes
-  // out, or Stable, one a week and an urgent one at once, chosen by the
-  // update feed. It holds for the version row's Check too, so it stays lit
-  // with automatic updates off.
-  row(t("Update channel"), s.updateChannel === "stable"
-    ? t("One version a week, out for three days first, and urgent fixes at once. What's new lists every change since yours")
-    : t("Every version as soon as it is out"), "",
-    segs([["every", t("Every version")], ["stable", t("Stable")]], s.updateChannel === "stable" ? "stable" : "every",
-      (v) => savePrefs({ ...keep, updateChannel: v === "stable" ? "stable" : "" }))).classList.add("update-channel-row");
-  // whether a newer version found is downloaded at once, or only said to
-  // be out and downloaded on a click (#2296): a metered network or a
-  // proxy billed by traffic. It holds for the version row's Check too.
-  row(t("Download updates automatically"), s.noAutoDownload
-    ? t("Off: a newer version is only shown, with its size; it downloads when you click Download update. For metered networks and proxies billed by traffic")
-    : t("Downloads a newer version as soon as it is found. Turn off on a metered network or a proxy billed by traffic"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.noAutoDownload ? "off" : "on", (v) => savePrefs({ ...keep, noAutoDownload: v === "off" }))).classList.add("update-download-row");
-  row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it without cutting off an agent's request"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.autoRestart ? "on" : "off", (v) => savePrefs({ ...keep, autoRestart: v === "on" }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
-  renderUpdateMirror(row(t("Download source"), "", ""), s);
   const open = el("button", "text", t("Open"));
   open.onclick = () => api("settings/reveal", {}).catch(statusErr);
   // portable (a data folder beside magpie, #508): everything is in there
-  row(t("Config folder"), s.portable ? t("Portable: everything magpie keeps, in the data folder beside it") : t("providers, profiles and these settings"), s.dir, copyBtn(s.dir, t("Path")), open);
+  row(t("Config folder"), s.portable ? t("Portable: everything magpie keeps, in the data folder beside it") : t("providers, profiles and these settings"), s.dir, copyBtn(s.dir, t("Path")), ...(!edition || !web ? [open] : []));
   // app.log (applog); magpie web writes none
-  if (s.log) {
+  if (s.log && (!edition || !web)) {
     const o = el("button", "text", t("Open"));
     o.onclick = () => api("settings/log/reveal", {}).catch(statusErr);
     row(t("Log"), t("What magpie has logged, to send with a bug report"), s.log, copyBtn(s.log, t("Path")), o).id = "logRow";
   }
-  renderCLI(row(t("Command line"), t("Checking your shells…"), ""));
+  if (!edition) renderCLI(row(t("Command line"), t("Checking your shells…"), ""));
   // served to other machines (magpie web), the one they reach (noahhrreion)
   const gw = web && s.publicURL || s.gateway;
   row(t("Gateway URL"), t("the address every agent is pointed at"), gw, copyBtn(gw, t("Gateway URL")));
   // Claude Code elsewhere (Docker): the host runs this curl
-  if (web) {
+  if (!edition && web) {
     const cmd = "curl -fsS -m 1 -H 'Authorization: Bearer <gateway key>' --data-binary @- " + gw + "/v1/magpie/statusline || true";
     row(t("Status line on another computer"), t("statusLine's command in Claude Code's settings.json there; a read-only gateway key is enough"), cmd, copyBtn(cmd, t("Command"))).id = "statuslineRemoteRow";
   }
@@ -20181,45 +20216,44 @@ function renderSettings() {
     const who = self.pubWho?.(s) || t("Public address");
     row(who, t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, who)).id = "publicURLRow";
   }
-  const site = el("button", "text", t("Open"));
-  site.onclick = () => api("open", { url: "https://usemagpie.ai" }).catch(() => {});
-  row(t("Website"), t("downloads, docs and what's new"), "usemagpie.ai", site);
+  if (!edition) {
+    const site = el("button", "text", t("Open"));
+    site.onclick = () => api("open", { url: "https://usemagpie.ai" }).catch(() => {});
+    row(t("Website"), t("downloads, docs and what's new"), "usemagpie.ai", site);
+  }
   const lic = el("button", "text", t("View"));
   lic.onclick = showNotices;
   row(t("Open-source licenses"), t("the notices of the code and data magpie is built with"), "", lic);
-  const join = el("button", "discord");
-  join.innerHTML = DISCORD_SVG;
-  join.append(el("span", "", t("Join Discord")));
-  join.title = "discord.gg/vGSnD3ZKQF";
-  join.onclick = () => api("open", { url: "https://discord.gg/vGSnD3ZKQF" }).catch(() => {});
-  // issues and the code are on GitHub, for those who'd rather not use Discord
-  const repo = el("button", "github");
-  repo.innerHTML = GITHUB_SVG;
-  repo.append(el("span", "", "GitHub"));
-  repo.title = "github.com/yetone/magpie";
-  repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
-  row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
+  if (!edition) {
+    const join = el("button", "discord");
+    join.innerHTML = DISCORD_SVG;
+    join.append(el("span", "", t("Join Discord")));
+    join.title = "discord.gg/vGSnD3ZKQF";
+    join.onclick = () => api("open", { url: "https://discord.gg/vGSnD3ZKQF" }).catch(() => {});
+    // issues and the code are on GitHub, for those who'd rather not use Discord
+    const repo = el("button", "github");
+    repo.innerHTML = GITHUB_SVG;
+    repo.append(el("span", "", "GitHub"));
+    repo.title = "github.com/yetone/magpie";
+    repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
+    row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
+  }
   // magpie uninstall, from the app (Jevik_AI on X deleted magpie's folders
   // by hand and Codex kept pointing at a gateway that was gone). Never in a
   // browser: magpie web would be taken off the computer serving the page.
-  if (!web) {
+  if (!web && (!edition || params.has("uninstall"))) {
     const go = el("button", "text danger", t("Uninstall…"));
     go.onclick = () => uninstallMagpie(go);
     row(t("Uninstall magpie"), t("Disconnects every agent, putting back what each had, then removes magpie's service and files"), "", go).id = "uninstallRow";
     if (mode === "window" && params.has("uninstall")) params.delete("uninstall"), uninstallMagpie(go);
   }
-  // gateway mode leaves out what is written into this computer's agents'
-  // files, and the alerts its desktop would show
-  for (const r of [$("#plainNamesSegs").parentElement, $("#alertHead"), $("#alertList")]) r.hidden = gatewayMode;
-  // the parts' tabs, one gone whose rows are all hidden here
-  setSetTab(setTab);
 }
 
 // Gateway mode's switch, in magpie web alone (gatewaymode.go): Automatic
 // (on with --gateway or no agents here), On or Off. Turned, the tabs follow
 // at once.
 function renderGatewayMode(s) {
-  $("#gatewayModeRow").hidden = !web;
+  $("#gatewayModeRow").hidden = !web || !!edition;
   if (!web) return;
   $("#gatewayModeSegs").replaceChildren(segs([["auto", t("Automatic")], ["on", t("On")], ["off", t("Off")]], s.gatewayMode || "auto", (v) =>
     writingPrefs(api("settings/gateway-mode", { mode: v === "auto" ? "" : v })).then((ns) => {
@@ -20251,170 +20285,6 @@ function renderLangPick(s, keep) {
       savePrefs({ ...keep, lang: v });
     }, "Language", "sess-menu", "right");
   };
-}
-
-// renderSync: the Settings page's sync and backup — a remote keeping the
-// setup the same on every computer, and a sealed file to carry by hand.
-// One of the three opens a form below its row at a time.
-let syncOpen = ""; // "dav" | "export" | "import"
-const syncNames = { webdav: "WebDAV", s3: "S3", github: "GitHub" };
-function syncServers(v) {
-  const servers = { ...v.servers };
-  if (v.other) servers[v.other.kind] ||= v.other;
-  return servers;
-}
-let syncView = null;
-async function renderSync(v) {
-  const box = $("#syncList");
-  if (v) syncView = v;
-  else if (!syncView) {
-    syncView = await api("davsync").catch(() => ({}));
-  }
-  v = syncView;
-  box.replaceChildren();
-  const row = (name, sub, ...tools) => {
-    const r = el("div", "row pref");
-    const who = el("div", "who");
-    who.append(el("div", "name", name));
-    const s = el("div", "sub", sub);
-    who.append(s);
-    const val = el("div", "val");
-    val.append(...tools);
-    r.append(who, val);
-    box.append(r);
-    return s;
-  };
-  const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
-  const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
-  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
-
-  // off: what it would keep the same, from the view's toggles (none: all on)
-  const goes = ["settings", "profiles"];
-  if (v.agents !== false) goes.push("agents");
-  if (v.library !== false) goes.push("library");
-  if (v.usage) goes.push("usage");
-  if (v.signIns) goes.push("signins");
-  let line = t("Keeps {parts} the same on every computer", {
-    parts: t(v.keys === false ? "providers without their API keys" : "providers with their API keys") + t(", ") + parts(goes) });
-  const s3 = v.on && v.kind === "s3";
-  const github = v.on && v.kind === "github";
-  if (v.on) {
-    const hostOf = (u) => { try { return new URL(u).host; } catch { return u; } };
-    // a bucket is named by its address, and the server it is on unless AWS
-    const host = github ? [v.url, v.branch].filter(Boolean).join(" · ")
-      : s3 ? [v.url, v.endpoint && hostOf(v.endpoint.includes("://") ? v.endpoint : "https://" + v.endpoint)].filter(Boolean).join(" · ") : hostOf(v.url);
-    line = v.error ? t("Couldn't sync: {error}", { error: v.serverFile ? serverFileSaid(v.serverFile) : t(v.error) })
-      : v.last ? t("Synced {when} · {host}", { when: syncWhen(v.last), host }) : t("Not synced yet · {host}", { host });
-    // the other kind's server, kept from before sync moved here
-    for (const kind of Object.keys(syncServers(v))) line += " · " + t("{kind} settings kept", { kind: syncNames[kind] });
-    if (v.auto === 0) line += " · " + t("only when asked");
-  }
-  const sub = row(t(github ? "GitHub sync" : s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV, S3 or GitHub sync"), line, ...(v.on
-    ? [btn(t("Sync now"), async (e) => { e.target.classList.add("busy"); renderSync(await api("davsync/now", {}).catch((x) => ({ ...v, error: x.message }))); }),
-       btn(t(syncOpen === "dav" ? "Close" : "Edit"), toggle("dav"))]
-    : [btn(t(syncOpen === "dav" ? "Close" : "Set up"), toggle("dav"))]));
-  if (v.error) sub.classList.add("bad", "wraps");
-  if (v.on) sub.classList.add("say");
-  // usage not shared: its own red line (#1259)
-  if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
-  // subscriptions synced with no account here (悠悠哥 on Discord)
-  // with sign-ins synced, it is one no other computer shared
-  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", v.signIns
-    ? t("Your synced settings use {names}, which isn't signed in on this computer, and no other computer synced its sign-in. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })
-    : t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
-  if (v.on && v.error && v.serverFile?.replace) {
-    row(t("Upload this computer's setup"), t("It replaces the file on the server. That file is kept in the sync folder first."),
-      btn(t("Upload…"), () => syncFile("askUpload", v.serverFile)));
-  }
-  // agent fields set back here after a sync changed them (hayden4608)
-  if (v.on && v.agents !== false && v.own?.length) {
-    const fields = v.own.map((f) => t("{agent} {field}", { agent: f.agent, field: t(f.field) })).join(t(", "));
-    row(t("Kept on this computer"), t("{fields}: set back here after a sync changed them, so they stay as picked here.", { fields }),
-      btn(t("Follow the others"), async (e) => {
-        e.target.classList.add("busy");
-        renderSync(await api("davsync/follow", {}).catch((x) => ({ ...v, error: x.message })));
-        refreshAfterSync();
-      })).classList.add("wraps", "sync-own");
-  }
-  if (v.notice) {
-    const n = v.notice, r = el("div", "row pref sync-note");
-    const lines = [];
-    if (n.restored) lines.push(t("Restored from the server: {parts}", { parts: parts(n.here || []) }));
-    else if (n.here?.length && n.followed) lines.push(t("Replaced by the server's, as this computer follows it: {parts}", { parts: parts(n.here) }));
-    else if (n.here?.length) lines.push(t("Replaced here by newer ones from another computer: {parts}", { parts: parts(n.here) }));
-    if (n.there?.length) lines.push(t("Replaced on the server by this computer's newer ones: {parts}", { parts: parts(n.there) }));
-    const who = el("div", "who");
-    for (const l of lines) who.append(el("div", "sub say", l));
-    who.append(el("div", "sub say", t(n.restored ? "This computer's setup from before is kept in the sync folder." : "The copies replaced are kept in the sync folder.")));
-    const val = el("div", "val");
-    if (n.restored && v.undo) val.append(btn(t("Undo"), async (e) => {
-      e.target.classList.add("busy");
-      try { renderSync(await api("davsync/undo", {})); refreshAfterSync(); } catch (x) { e.target.classList.remove("busy"); sub.textContent = x.message; sub.classList.add("bad"); }
-    }));
-    val.append(btn(t("Show"), () => api("davsync/reveal", {}).catch(statusErr)), btn(t("OK"), async () => renderSync(await api("davsync/dismiss", {}))));
-    r.append(who, val);
-    box.append(r);
-  }
-  if (syncOpen === "dav") box.append(syncFile("davForm", v));
-  if (v.on) {
-    // how often it syncs by itself, or never: a free 坚果云 account is
-    // allowed only so many requests (#847)
-    const every = v.auto ?? 3;
-    row(t("Sync by itself"), every ? t("Every {n} minutes while magpie runs", { n: every }) : t("Off: only Sync now syncs"),
-      segs([[0, t("Off")], [3, t("3 min")], [15, t("15 min")], [30, t("30 min")], [60, t("1 hour")]], every, async (m) => {
-        renderSync(await api("davsync/auto", { minutes: m || -1 }).catch((x) => ({ ...v, error: x.message })));
-      }));
-    // following the server (Ramon317317 on X)
-    const follows = !!v.followServer;
-    row(t("This computer"), follows
-      ? t("Takes the server's setup and sends none. A change made here is replaced and kept in the sync folder.")
-      : t("Changes go to the other computers, and theirs come here"),
-      segs([["both", t("Both ways")], ["follow", t("Follows the server")]], follows ? "follow" : "both", async (m) => {
-        if ((m === "follow") === follows) return;
-        renderSync(await api("davsync/follow-server", { on: m === "follow" }).catch((x) => ({ ...v, error: x.message })));
-        refreshAfterSync();
-      })).classList.add("wraps", "sync-follows");
-    row(t("Restore from the server"), t("This computer's setup becomes the one on the server. What is here now is kept first, to undo."),
-      btn(t("Restore…"), () => syncFile("askRestore", v, parts)));
-  }
-
-  // export and import
-  row(t("Export"), t("Everything above in one file, sealed with a passphrase, to carry to another computer"), btn(t(syncOpen === "export" ? "Close" : "Export…"), toggle("export")));
-  if (syncOpen === "export") box.append(syncFile("exportForm"));
-  row(t("Import"), t("Bring in a file exported from magpie"), btn(t(syncOpen === "import" ? "Close" : "Import…"), toggle("import")));
-  if (syncOpen === "import") box.append(syncFile("importForm"));
-  // Back up by itself (jwaitq), in autobackup.js
-  const ab = box.appendChild(el("div"));
-  if (window.autoBackupFill) autoBackupFill(ab); else import("./autobackup.js").then(() => autoBackupFill(ab), () => {});
-}
-
-// syncFile draws the server's, Export's or Import's form, or asks before a
-// Restore or Upload, from syncfiles.js once loaded
-function syncFile(f, v, ...more) {
-  if (window[f]) return window[f](v, ...more);
-  if (f.startsWith("ask")) return import("./syncfiles.js").then(() => window[f](v, ...more), statusErr);
-  const at = el("div");
-  import("./syncfiles.js").then(() => at.replaceWith(window[f](v)), () => {});
-  return at;
-}
-
-// serverFileSaid: what the server holds where the backup should be, in the
-// reader's language, from what davsync told of it (never its contents).
-function serverFileSaid(f) {
-  const size = fmtBytes(f.size || 0);
-  switch (f.what) {
-    case "empty": return t("the file on the server is empty (0 bytes)");
-    case "cut": return t("the file on the server is a magpie backup cut short ({size}): a write to it was interrupted", { size });
-    case "page": {
-      let s = f.title ? t("the server answered with a web page (“{title}”) instead of the file", { title: f.title }) : t("the server answered with a web page instead of the file");
-      if (f.moved) s += t(", after a redirect to {where}", { where: f.moved });
-      return s + t(": check the address is the server's WebDAV address, not its website");
-    }
-    case "xml": return t("the server answered with an XML document instead of the file: check the address is the server's WebDAV address");
-    case "format": return t("the file on the server is another app's (“{format}”), not a magpie backup", { format: f.format });
-    case "json": return t("the file on the server is a JSON file that isn't a magpie backup ({size})", { size });
-  }
-  return t("the file on the server isn't a magpie backup: it is {type} ({size})", { type: f.type || "?", size });
 }
 
 // refreshAfterSync: what a sync or an import brought in reaches the other
@@ -20581,7 +20451,7 @@ function suffixed(name, by, own, mode = suffixMode()) {
 // (another setting saved meanwhile), it came up in the window's corner and
 // saved the other setting back as it was.
 let trayUsageLoading = null;
-function renderTrayUsage(s, keep) {
+function renderUsagePreferences(s, keep) {
   $("#quotaLeftSegs").replaceChildren(segs([[false, t("Used")], [true, t("Left")]], !!s.quotaLeft,
     (on) => { if (on !== quotaLeft) setQuotaLeft(on); }));
   // allowances read by magpie itself, or only when the user asks: at login
@@ -20594,16 +20464,20 @@ function renderTrayUsage(s, keep) {
   $("#unitsRow").hidden = locale !== "zh" && locale !== "zh-TW";
   $("#unitsSegs").replaceChildren(segs([[false, t("K / M / B")], [true, t("万 / 亿")]], !!s.chineseUnits,
     (v) => savePrefs({ ...keep, chineseUnits: v })));
+  const rate = s.fx?.rate;
+  const currencySub = $("#currencySub");
+  currencySub.textContent = edition ? "" : t("What a cost — the Usage page's, the tray panel's, the TUI's and the CLI's — is shown as; a vendor's own balance, already in its own currency, is never converted");
+  currencySub.title = rate ? t("1 USD = {rate} CNY{when}", { rate: rate.toFixed(2), when: s.fx.at ? " · " + (s.fx.stale ? t("last fetched {when}", { when: syncWhen(s.fx.at) }) : t("fetched {when}", { when: syncWhen(s.fx.at) })) : "" }) : "";
+}
+
+function renderTrayUsage(s, keep) {
+  renderUsagePreferences(s, keep);
   renderAlerts(s, keep);
   $("#plainNamesSegs").replaceChildren(suffixSegs());
   sayNoNamesInSettings();
   renderAgentPrefs();
   renderAgentPrefLinks();
   renderProvPrefLinks();
-  const rate = s.fx?.rate;
-  const currencySub = $("#currencySub");
-  currencySub.textContent = t("What a cost — the Usage page's, the tray panel's, the TUI's and the CLI's — is shown as; a vendor's own balance, already in its own currency, is never converted");
-  currencySub.title = rate ? t("1 USD = {rate} CNY{when}", { rate: rate.toFixed(2), when: s.fx.at ? " · " + (s.fx.stale ? t("last fetched {when}", { when: syncWhen(s.fx.at) }) : t("fetched {when}", { when: syncWhen(s.fx.at) })) : "" }) : "";
   $("#trayUsageRow").hidden = web;
   if (web) return;
   const mac = document.body.classList.contains("mac");
@@ -20755,13 +20629,15 @@ function renderProxy(s, keep) {
     off: t("Off: requests to vendors without a proxy of their own, and update checks, go direct"),
     none: t("No system proxy found; requests to vendors without a proxy of their own, and update checks, go direct"),
   }[s.proxySource] || "";
+  if (edition && s.proxySource === "settings") sub.textContent = proxyDisplay(s.proxyNow);
+  if (edition && (s.proxySource === "off" || s.proxySource === "none")) sub.textContent = t("Direct");
   const row = proxyRow(s, keep, {
     key: "proxy", box: $("#proxySegs"), cur, state: proxyState,
     modes: withSavedMode([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], cur === "saved"),
     again: () => renderProxy(s, keep),
   });
   renderProxyCheck(s, row);
-  renderPluginProxy(s, keep);
+  if (!edition) renderPluginProxy(s, keep);
 }
 const proxyState = { custom: false };
 // plugin downloads' proxy (JonahFu on X); plugins' vendor requests follow the one above
@@ -21830,6 +21706,7 @@ const REDACT_KINDS = [
 
 // renderDiscovery: whether magpie serves the agents' own sign-ins (#1535), set on its own
 function renderDiscovery(s, keep) {
+  if (edition) return;
   const box = $("#discoveryList");
   const r = el("div", "row pref");
   const who = el("div", "who");
@@ -21884,7 +21761,7 @@ function renderRedact(s, keep) {
   const box = $("#redactList"), find = $("#findList"), share = $("#shareList");
   box.replaceChildren();
   find.replaceChildren();
-  share.replaceChildren();
+  share?.replaceChildren();
   featOff(box, s, "redact", t("Nothing is masked until it is on. Choosing anything to mask below turns it on"));
   const rowIn = (into, name, sub, ...tools) => {
     const r = el("div", "row pref");
@@ -21930,19 +21807,21 @@ function renderRedact(s, keep) {
   privacyModelRow(find, masking ? "" : why);
   const always = el("span", "static-pill" + (masking ? " on" : ""), masking ? t("Always on") : t("Off"));
   rowIn(find, t("Rules"), masking ? t("Keys, tokens, emails and numbers whose checksum adds up: patterns that are certain, checked on every request") : why, always).id = "maskRulesRow";
-  if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
-    onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
-  rowIn(share, t("Turn off telemetry for all agents"), t("Over each agent's own Telemetry switch, an agent found later too"),
-    onOff(s.agentTelemetryOff, (off) => writingPrefs(api("settings/agent-telemetry", { off })).then((ns) => {
-      prefs = state.settings = ns;
-      if (ns.refused) status(ns.refused, "err");
-      renderSettings();
-      refreshAfterSync();
-    }, settingsErr))).id = "agentTelemetryAllRow";
-  rowIn(share, t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system"),
-    onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
-  if (!s.noStats) rowIn(share, t("Share the agents, providers, models and plugins I use"), t("Sent with that event, by magpie's own ids, with how many of each, and how often each partner was shown, opened and added; a provider you added yourself is only “custom”. Which of Discover's plugins are installed goes to usemagpie.ai for its counts. No names, addresses, accounts, keys or usage"),
-    onOff(!s.noUsageStats, (on) => savePrefs({ ...keep, noUsageStats: !on })));
+  if (share) {
+    if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
+      onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
+    rowIn(share, t("Turn off telemetry for all agents"), t("Over each agent's own Telemetry switch, an agent found later too"),
+      onOff(s.agentTelemetryOff, (off) => writingPrefs(api("settings/agent-telemetry", { off })).then((ns) => {
+        prefs = state.settings = ns;
+        if (ns.refused) status(ns.refused, "err");
+        renderSettings();
+        refreshAfterSync();
+      }, settingsErr))).id = "agentTelemetryAllRow";
+    rowIn(share, t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system"),
+      onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
+    if (!s.noStats) rowIn(share, t("Share the agents, providers, models and plugins I use"), t("Sent with that event, by magpie's own ids, with how many of each, and how often each partner was shown, opened and added; a provider you added yourself is only “custom”. Which of Discover's plugins are installed goes to usemagpie.ai for its counts. No names, addresses, accounts, keys or usage"),
+      onOff(!s.noUsageStats, (on) => savePrefs({ ...keep, noUsageStats: !on })));
+  }
   if (!featureHides($('#nav button[data-view="masking"]'))) {
     const open = el("button", "", t("Open"));
     open.type = "button";
@@ -22741,7 +22620,6 @@ function dockChoice(s) {
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
   return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "",
-    sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},
     trayUsages: s.trayUsages || [],
@@ -23188,7 +23066,7 @@ async function show(v) {
   // a built-in page a plugin's page replaces (magpie.page.replaces) opens that
   v = magpie.replacing?.(v) || v;
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
-  if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
+  if (enterpriseHides(v) || gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
   // and one a built-in plugin switched off has, offView
   v = offView(v);
   if (v !== view) {
@@ -23230,7 +23108,7 @@ async function show(v) {
   $("#prefs").classList.toggle("on", v === "settings");
   if (v === "settings") $("#prefs").setAttribute("aria-current", "page"); else $("#prefs").removeAttribute("aria-current");
   navSubs();
-  for (const id of ["agents", "providers", "plugins", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
+  for (const id of ["agents", "providers", "settings", ...magpie.pages()]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backAfterLoad($("#view-" + v));
   requestAnimationFrame(back);
@@ -23244,7 +23122,6 @@ async function show(v) {
   // Routing's accounts' windows as Usage read them (#1833), never an asked read
   if (rtView(v) && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
   if (v === "settings") (settingsLoad = loadSettings()).then(back, statusErr);
-  if (v === "plugins") window.loadPlugins?.()?.then(back);
   syncTitle();
   syncURL();
   return true;
@@ -23291,12 +23168,9 @@ function offView(v) {
 // plugin switched off leaves out
 function navHides() {
   if (mode !== "window") return;
-  for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b);
+  for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = enterpriseHides(b.dataset.view) || (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b);
 }
-// applyFeatures takes the built-in plugins' state from a read of the
-// settings, or a switch on Plugins › Built-in:
-// what is off leaves the window, and the page open, if it went, gives way
-// to Agents (Providers in gateway mode)
+// Refresh visible features after a settings read or switch.
 function applyFeatures(list) {
   if (!Array.isArray(list)) return;
   // each plugin's settings to its code in the page (kernel.js)
@@ -23325,7 +23199,7 @@ function renderBuiltins(box, list, done) {
     who.append(el("div", "name", t(f.name)), el("div", "sub", t(f.sub)));
     if (f.inUse > 0) who.append(el("div", "sub feat-why", t(f.use, { n: f.inUse })));
     const line = el("div", "sub feat-go");
-    featWho[f.id]?.(line, f, who); // what it does now (plugins/search)
+    featWho[f.id]?.(line, f, who);
     featGo(line, f);
     if (line.childNodes.length) who.append(line);
     const b = libSwitch("use-credits", f.on, t(f.name));
@@ -23450,6 +23324,7 @@ $("#navBack").onclick = async () => {
 };
 // openSettingsAt: Settings at a row, in sight and lit; e is the click
 async function openSettingsAt(e, tab, row) {
+  if (!SET_TABS.includes(tab)) return;
   const go = scrollOnPurpose(e, 3000);
   closeProtoMenu();
   closeAgentMenu();
@@ -23827,8 +23702,6 @@ function navMorph(change) {
 // each page's own tabs, listed in the sidebar (navSubs)
 var NAV_SUBS = {
   usage: () => $("#usageTab"),
-  library: () => $("#view-library .lib-tabs"),
-  plugins: () => $("#view-plugins .lib-tabs"),
   settings: () => $("#setTabs"),
 };
 // each tab's mark, from navicons.js (loaded with the first list)
@@ -24141,7 +24014,7 @@ if (mode === "window") {
         set("--crumb-max", "none");
         return;
       }
-      const head = $(":is(#view-library .lib-head, #view-plugins .pm-head, #view-settings .set-head):not([hidden] *)");
+      const head = $("body #view-settings:not([hidden]) .set-head");
       const c = crumb.getBoundingClientRect(), gap = parseFloat(getComputedStyle(crumb).columnGap) || 0;
       const wide = kids.map((e) => (e.tagName === "B" ? e.scrollWidth : e.getBoundingClientRect().width) + gap);
       const whole = Math.ceil(wide.reduce((w, x) => w + x, 0) - (kids.length ? gap : 0));
@@ -24248,6 +24121,7 @@ if (web) setInterval(() => { if (!document.hidden) renderUpdateBadge(); }, 60e3)
 // the reader (someone else's plugin, or one pinned; the community's update
 // by themselves)
 async function renderPluginDot() {
+  if (edition) return;
   const b = mode === "window" && document.querySelector('#nav button[data-view="plugins"]');
   if (!b) return;
   const u = await api("plugins/updates").catch(() => null);
@@ -24549,6 +24423,7 @@ if (mode === "window" && params.get("import")) {
   params.delete("import");
   history.replaceState(null, "", "?" + params);
   api("import/" + encodeURIComponent(id)).then((im) => {
+    if (enterpriseDesktop && im.provider?.preset !== "remote-magpie") return;
     importing = im;
     if (providers && view === "providers") renderProviders();
   }).catch(() => {});

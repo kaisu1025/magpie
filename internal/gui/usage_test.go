@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -26,6 +27,57 @@ func holdUsageClock(t *testing.T, at time.Time) time.Time {
 	usage.Clock = func() time.Time { return at }
 	t.Cleanup(func() { usage.Clock = old })
 	return at
+}
+
+func TestEnterpriseDesktopLocalUsage(t *testing.T) {
+	sandboxHome(t)
+	now := holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	local := usage.Record{Time: now.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "local-model", Input: 42, Status: 200}
+	usage.Append(local)
+	other := local
+	other.Model, other.Input = "other-model", 900
+	if err := usage.KeepShared(usage.SharedDay{
+		Computer: "aabbccdd", Name: "Other computer", Day: now.Format(time.DateOnly),
+		Calls: []usage.SharedCall{{Record: other, Source: usage.SourceGateway}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	usageRoutes(mux, folderOnly{})
+	get := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
+		}
+		return w
+	}
+	ledger := func(q string) ledgerJSON {
+		t.Helper()
+		w := get("/api/usage/requests?period=today" + q)
+		var l ledgerJSON
+		if err := json.Unmarshal(w.Body.Bytes(), &l); err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	if l := ledger(""); l.Total != 2 || l.Input != 942 {
+		t.Fatalf("shared usage fixture: %d requests, %d input tokens", l.Total, l.Input)
+	}
+	t.Setenv("MAGPIE_EDITION", string(edition.Desktop))
+	if !edition.Builtin("usage") {
+		t.Fatal("desktop Usage page is disabled")
+	}
+	for _, q := range []string{"&limit=1", "&computer=others", "&computer=aabbccdd"} {
+		if l := ledger(q); l.Total != 1 || l.Input != 42 || len(l.Rows) != 1 || l.Rows[0].Model != "local-model" {
+			t.Fatalf("desktop usage (%s): %d requests, %d input tokens, rows %+v", q, l.Total, l.Input, l.Rows)
+		}
+	}
+	csv := get("/api/usage/requests.csv?period=today&computer=others").Body.String()
+	if !strings.Contains(csv, "local-model") || strings.Contains(csv, "other-model") {
+		t.Fatalf("desktop CSV contains the wrong requests: %s", csv)
+	}
 }
 
 func TestUsageLedgerDayRoutes(t *testing.T) {

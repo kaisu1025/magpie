@@ -6,13 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/pluginrt"
-	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	_ "github.com/yetone/magpie/plugins/all"
 )
@@ -49,44 +47,41 @@ func TestBuiltinSwitch(t *testing.T) {
 	if err := pluginrt.SetPreset(pluginrt.PresetEssentials); err != nil {
 		t.Fatal(err)
 	}
-	if rec := postBuiltin(h, `{"id":"library","on":true}`); rec.Code != http.StatusOK {
-		t.Fatalf("library on: %d %s", rec.Code, rec.Body)
+	if rec := postBuiltin(h, `{"id":"groups","on":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("groups on: %d %s", rec.Code, rec.Body)
 	} else {
 		var out []builtinJSON
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatal(err)
 		}
-		if len(out) != 14 {
+		if len(out) != len(pluginrt.Registered()) {
 			t.Fatalf("the built-ins: %+v", out)
 		}
 		for _, b := range out {
-			// the Gateway, Routing and Usage pages, the routing strategies,
-			// the gateway middleware, privacy masking, web search, key
-			// limits and plugin tools are essential: on in every preset
-			if b.On != (b.ID == "budget" || b.ID == "library" || b.ID == "gateway" || b.ID == "middleware" || b.ID == "redact" || b.ID == "rotation" || b.ID == "routing" || b.ID == "search" || b.ID == "tools" || b.ID == "usage") || b.On != (b.State == pluginrt.Active) {
-				t.Fatalf("after library on: %+v", out)
+			// The rest of the enterprise built-ins are essential.
+			if !b.On || b.State != pluginrt.Active {
+				t.Fatalf("after groups on: %+v", out)
 			}
 		}
 	}
-	if !pluginrt.Running().Active("library") || pluginrt.Running().Active("sessions") {
+	if !pluginrt.Running().Active("groups") {
 		t.Fatalf("the runtime: %+v", pluginrt.Running().Statuses())
 	}
 	if rec := postBuiltin(h, `{"id":"nope","on":true}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("an unknown plugin: %d", rec.Code)
 	}
-	// Observability in use: sending to a collector
+	// Masking in use: protecting secrets in requests.
 	s := settings.Load()
-	s.OTel.Enabled = true
-	s.OTel.Endpoint = "http://127.0.0.1:4318"
+	s.Redact = true
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	if rec := postBuiltin(h, `{"id":"otel","on":false}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "in use") {
-		t.Fatalf("otel off while in use: %d %s", rec.Code, rec.Body)
+	if rec := postBuiltin(h, `{"id":"redact","on":false}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "in use") {
+		t.Fatalf("redact off while in use: %d %s", rec.Code, rec.Body)
 	}
 	for _, b := range builtinsState() {
-		if b.ID == "otel" && (!b.On || b.Chosen || b.InUse != 1 || b.Use != "Sending to a collector" || b.Source != pluginrt.FromInUse) {
-			t.Fatalf("otel in use: %+v", b)
+		if b.ID == "redact" && (!b.On || b.InUse != 1 || b.Use != "Masking is on") {
+			t.Fatalf("redact in use: %+v", b)
 		}
 	}
 }
@@ -106,7 +101,7 @@ func TestBuiltinBrokenFile(t *testing.T) {
 			t.Fatalf("not told broken: %+v", b)
 		}
 	}
-	if rec := postBuiltin(h, `{"id":"library","on":false}`); rec.Code != http.StatusBadRequest {
+	if rec := postBuiltin(h, `{"id":"groups","on":false}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("switched over a broken file: %d", rec.Code)
 	}
 	if b, _ := os.ReadFile(pluginrt.Path()); string(b) != "plugins: [\n" {
@@ -132,10 +127,7 @@ func TestBootSaysBuiltinsOff(t *testing.T) {
 	if err := pluginrt.SetPreset(pluginrt.PresetEssentials); err != nil {
 		t.Fatal(err)
 	}
-	if err := pluginrt.Set("library", true); err != nil {
-		t.Fatal(err)
-	}
-	if b := boot(); !strings.Contains(b, `"featuresOff":["groups","otel","sessions","warmups"]`) {
+	if b := boot(); !strings.Contains(b, `"featuresOff":["groups"]`) {
 		t.Fatalf("Essentials picked: %s", b)
 	}
 }
@@ -322,43 +314,6 @@ func TestBuiltinsTranslated(t *testing.T) {
 	}
 }
 
-// Web search's row says what a model that can't search is searched with
-// now (netube99 on X): nothing yet in a new home, a search API once one
-// is set, and none while it is off.
-func TestBuiltinSearchSaysWhatSearches(t *testing.T) {
-	builtinHome(t)
-	if _, err := pluginrt.Settle(); err != nil {
-		t.Fatal(err)
-	}
-	search := func() builtinJSON {
-		for _, b := range builtinsState() {
-			if b.ID == "search" {
-				return b
-			}
-		}
-		t.Fatal("no search row")
-		return builtinJSON{}
-	}
-	if b := search(); !b.On || len(b.Searches) != 0 {
-		t.Fatalf("a new home: %+v", b)
-	}
-	if err := provider.SetSearchAPI(provider.SearchAPI{Vendor: "tavily", Key: "tvly-test"}); err != nil {
-		t.Fatal(err)
-	}
-	if b := search(); !b.On || !slices.Equal(b.Searches, []string{"Tavily"}) {
-		t.Fatalf("with Tavily: %+v", b)
-	}
-	if err := provider.RemoveSearchAPI("tavily"); err != nil {
-		t.Fatal(err)
-	}
-	if err := pluginrt.Set("search", false); err != nil {
-		t.Fatal(err)
-	}
-	if b := search(); b.On || b.Searches != nil {
-		t.Fatalf("off: %+v", b)
-	}
-}
-
 // A built-in with settings says where they are, and its page on or off,
 // for its row to go to both (netube99 on X: masking's switch, settings and
 // page didn't name each other)
@@ -372,15 +327,10 @@ func TestBuiltinSaysWhereItsSettingsAre(t *testing.T) {
 	}
 	want := map[string][3]string{
 		"redact":   {"privacy #redactList", "masking", ""},
-		"search":   {"models #searchList", "", ""},
-		"otel":     {"otel #otelList", "", ""},
 		"gateway":  {"network #portList", "gateway", ""},
-		"library":  {"", "library", ""},
 		"groups":   {"", "", "groups"},
 		"budget":   {"", "", "gateway"},
 		"rotation": {"", "", "providers"},
-		"warmups":  {"", "", "providers"},
-		"tools":    {"", "", "plugins"},
 	}
 	for _, b := range builtinsState() {
 		w, ok := want[b.ID]

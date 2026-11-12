@@ -158,13 +158,6 @@ function archivePanel(name, id, redraw) {
 const PERIODS = [["today", "Today"], ["last:24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All"]];
 try { const v = localStorage.getItem("magpie.usagePeriod"); if (PERIODS.some(([id]) => id === v)) period = v; } catch {}
 
-// The reader's time zone, which magpie reads the period's days, the chart's
-// hours and a picked day in: magpie web may be read from another zone than
-// the computer's, whose days put a call at 9:00 in UTC+8 under 1:00 (Outvi V
-// on Discord). None, and magpie reads its own.
-function usageZone() {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; }
-}
 const usageZoneQ = () => (usageZone() ? "&tz=" + encodeURIComponent(usageZone()) : "");
 
 // asked: the reader opened the page, so a Claude account's usage is read
@@ -1335,6 +1328,7 @@ window.openUsageRoute = (route) => {
 // Routing's account list sends its reader to each account's
 // allowances in full: the Overview, its tab not kept as the reader's own
 window.openUsageOverview = () => {
+  if (enterpriseDesktop) return show("usage");
   if (usageTab === "requests") ledLeave();
   usageTab = "usage";
   show("usage");
@@ -1380,7 +1374,8 @@ function ledParams(extra) {
   if (ledPurpose) q.set("purpose", ledPurpose);
   if (ledProvider) q.set("provider", ledProvider);
   if (ledAccount) q.set("account", ledAccount);
-  if (ledComputer) q.set("computer", ledComputer);
+  if (enterpriseDesktop) q.set("computer", "this");
+  else if (ledComputer) q.set("computer", ledComputer);
   if (ledCallerKey) q.set("callerKey", ledCallerKey);
   if (ledVia) q.set("via", ledVia);
   if (ledRoute) q.set("route", ledRoute);
@@ -3270,8 +3265,8 @@ function ledSaid(p, model) {
   return part;
 }
 
-const USAGE_TABS = [["usage", "Overview"], ["requests", "Requests"], ["sessions", "Sessions"], ["context", "Context"]];
-let usageTab = "usage";
+const USAGE_TABS = enterpriseDesktop ? [["requests", "Requests"]] : [["usage", "Overview"], ["requests", "Requests"], ["sessions", "Sessions"], ["context", "Context"]];
+let usageTab = USAGE_TABS[0][0];
 try { const k = localStorage.getItem("magpie.usageTab"); if (USAGE_TABS.some(([id]) => id === k)) usageTab = k; } catch {}
 let sessAgent = "all";
 let sessQuery = "";
@@ -3324,8 +3319,9 @@ const sessFull = new Map(); // a top session's key → the session read whole, o
 
 function renderUsageTab() {
   const seg = $("#usageTab");
+  seg.hidden = USAGE_TABS.length === 1;
   seg.replaceChildren();
-  for (const [id, name] of USAGE_TABS) {
+  for (const [id, name] of seg.hidden ? [] : USAGE_TABS) {
     const b = el("button", "opt" + (id === usageTab ? " on" : ""), t(name));
     b.dataset.seg = id;
     b.onclick = () => {
@@ -3339,7 +3335,7 @@ function renderUsageTab() {
     };
     seg.append(b);
   }
-  slide(seg, "usageTab");
+  if (!seg.hidden) slide(seg, "usageTab");
   const on = usageTab === "sessions";
   // the Context tab has its own range, in its pane
   $("#period").hidden = on || usageTab === "context";
@@ -3348,6 +3344,7 @@ function renderUsageTab() {
   $("#usagePane").hidden = usageTab !== "usage";
   $("#ledgerPane").hidden = usageTab !== "requests";
   $("#sessionsPane").hidden = !on;
+  $("#sessAll").hidden = !sessionPageAvailable();
   ledReqShown();
   $("#contextPane").hidden = usageTab !== "context";
 }
@@ -3770,7 +3767,8 @@ function renderSessions() {
     stats.classList.remove("six");
     stats.classList.add("empty");
     const filtered = sessAgent !== "all" || sessModel || sessFolder || q;
-    stats.append(el("div", "none", !all.length && !rows.length ? t("No sessions yet. Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, with what each cost and the command that resumes it.") : filtered ? t("No session matches.") : t("Nothing in this range.")));
+    const empty = gatewayMode ? t("No sessions yet") : t("No sessions yet. Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, with what each cost and the command that resumes it.");
+    stats.append(el("div", "none", !all.length && !rows.length ? empty : filtered ? t("No session matches.") : t("Nothing in this range.")));
     if (from && all.some((s) => byAgent(s) && byFolder(s) &&
       (!sessModel || s.models.some((m) => m.model === sessModel)) &&
       (!q || [s.title, s.cwd, s.id, s.name, ...s.models.map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))))) {
@@ -4517,12 +4515,16 @@ function sessSpent(s) {
 // (Plugins › Built-in) there is nowhere to open it, so the row unfolds the
 // session's details in place, as a top session's do, instead of looking like
 // a link and doing nothing when clicked (#2311, betacatZ).
+function sessionPageAvailable() {
+  return magpie.pages().includes("sessions") && !featuresOff.has("sessions") && !enterpriseHides("sessions");
+}
+
 function sessionItem(s) {
   const item = el("div", "sess-item");
   item.sess = s;
   const r = el("div", "row sess sess-link");
   const key = s.agent + ":" + s.id;
-  const here = featuresOff.has("sessions");
+  const here = !sessionPageAvailable();
   const unfolded = here && sessListOpen === key;
   r.tabIndex = 0;
   if (here) {
@@ -4546,7 +4548,7 @@ function sessionItem(s) {
   r.append(go);
   const open = (e) => {
     if (window.getSelection()?.toString()) return;
-    if (!featuresOff.has("sessions")) return magpie.call("sessions", "reveal", s, e);
+    if (!here) return magpie.call("sessions", "reveal", s, e);
     // Sessions is switched off: there is no page to open it on
     sessListOpen = sessListOpen === key ? "" : key;
     // one open at a time: the one that was folds
@@ -4732,7 +4734,7 @@ usageTicks();
 if (mode === "window" && params.get("view") === "usage") {
   // An explicit destination takes precedence over the remembered tab.
   const tab = params.get("tab");
-  if (tab === "requests" || tab === "usage") usageTab = tab;
+  if (tab === "requests" || tab === "usage" && !enterpriseDesktop) usageTab = tab;
   // a total in the menu bar opens the Overview at its period
   const per = params.get("period");
   if (PERIODS.some(([id]) => id === per)) period = per;
@@ -4742,12 +4744,13 @@ if (mode === "window" && params.get("view") === "usage") {
   ledProvider = params.get("provider") || "";
   ledAgent = params.get("agent") || "";
   ledPurpose = params.get("purpose") || "";
-  ledComputer = params.get("computer") || "";
+  ledComputer = enterpriseDesktop ? "" : params.get("computer") || "";
+  if (enterpriseDesktop) ledDay = params.get("day") || "";
   const v = params.get("via") || "";
   ledVia = v === "through" || v === "direct" || v === "reported" ? v : "";
   // a way in, not the reader's pick: they go once the Requests are left
-  for (const [k, x] of [["provider", ledProvider], ["agent", ledAgent], ["purpose", ledPurpose], ["computer", ledComputer], ["via", ledVia]]) if (x) ledLent.add(k);
+  for (const [k, x] of [["provider", ledProvider], ["agent", ledAgent], ["purpose", ledPurpose], ["computer", ledComputer], ["day", ledDay], ["via", ledVia]]) if (x) ledLent.add(k);
   const u = new URL(location.href);
-  for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via", "period"]) u.searchParams.delete(k);
+  for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via", "period", "day"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
 }

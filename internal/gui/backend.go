@@ -10,6 +10,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexrelay"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -51,10 +52,14 @@ func startBackend() (gw *gateway.Server) {
 	}()
 	// Codex's background app-server, restarted when it has the list from
 	// before a change and no codex session is on it (luci)
-	go agent.KeepCodexDaemonCurrent(backendCtx)
+	if edition.Current() != edition.Server {
+		go agent.KeepCodexDaemonCurrent(backendCtx)
+	}
 	// the compactions magpie made in Codex's threads written as Codex's
 	// own, so a thread goes on when Codex talks to OpenAI itself
-	go agent.KeepCodexRolloutsPortable(backendCtx)
+	if edition.Current() != edition.Server {
+		go agent.KeepCodexRolloutsPortable(backendCtx)
+	}
 	// Model lists are fetched, never compiled in: whatever the agents can see
 	// comes from the models.dev catalog plus each vendor's own /models answer.
 	// Keep both halves warm without making the user click anything.
@@ -76,7 +81,9 @@ func startBackend() (gw *gateway.Server) {
 		// fetch tells the agents (catalog.Changed). Then again each day
 		// it stays open, for new models' prices, and soon after a fetch
 		// that failed.
-		go catalog.KeepFresh()
+		if edition.Current() != edition.Desktop {
+			go catalog.KeepFresh()
+		}
 		// A signed-in agent's list exists only at the vendor; fill it in the
 		// first time so the picker never shows a stale snapshot.
 		provider.FetchNew(20 * time.Second)

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"net"
 	"net/url"
 	"os"
 	"reflect"
@@ -28,6 +29,7 @@ import (
 	"github.com/yetone/magpie/internal/capre"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/fonts"
 	"github.com/yetone/magpie/internal/lastgood"
@@ -1999,6 +2001,13 @@ func CheckPort(p int) error {
 // taken, and a port of one's own is easier to tell apart).
 func GatewayAddr() string {
 	if a := os.Getenv("MAGPIE_ADDR"); a != "" {
+		if edition.Current() == edition.Desktop {
+			_, port, err := net.SplitHostPort(a)
+			if err != nil {
+				return SavedAddr()
+			}
+			return net.JoinHostPort("127.0.0.1", port)
+		}
 		return a
 	}
 	return SavedAddr()

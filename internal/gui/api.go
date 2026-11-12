@@ -35,6 +35,7 @@ import (
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/bark"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/fonts"
 	"github.com/yetone/magpie/internal/fx"
@@ -1116,7 +1117,6 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
 	devRoutes(mux)
-	pluginPageRoutes(mux, isWeb(w))
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
 	mux.HandleFunc("GET /boot.js", func(rw http.ResponseWriter, r *http.Request) {
@@ -1124,6 +1124,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// and the text size, which the Mac's header measures against the
 		// traffic lights
 		boot := map[string]any{"lang": s.Lang, "theme": s.Theme, "textSize": s.TextSize, "web": isWeb(w)}
+		if edition.Enterprise() {
+			boot["edition"] = edition.Current()
+		}
 		// and the version that served the page: a browser's page reloads
 		// once another answers in its place (visamzh on X), as after its
 		// own restart to update (backAsNew)
@@ -1499,11 +1502,6 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			if ps, err = profile.Load(); err == nil {
 				applied, err = profile.Apply(ps[in.Name])
 			}
-			if applied.Library != nil {
-				lastProblems.Lock()
-				lastProblems.p = applied.Library.Problems
-				lastProblems.Unlock()
-			}
 		case "delete":
 			err = profile.Delete(in.Name)
 		case "rename":
@@ -1538,26 +1536,22 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	importRoutes(mux)
 	usageRoutes(mux, w)
 	callerKeyRoutes(mux)
-	sessionRoutes(mux, w)
-	sessionManageRoutes(mux, w)
-	backupRoutes(mux, w)
 	dataFolderRoutes(mux, w)
 	mtlsRoutes(mux, w)
 	joinRoutes(mux)
 	httpsRoutes(mux, w)
 	uninstallRoutes(mux, w)
 	archiveRoutes(mux)
-	libraryRoutes(mux, w)
-	updateRoutes(mux, w)
-	whatsNewRoutes(mux)
+	if !edition.Enterprise() {
+		updateRoutes(mux, w)
+		whatsNewRoutes(mux)
+	}
 	cliBehindRoutes(mux)
 	configRepairRoutes(mux, !isWeb(w))
 	gatewayFixRoutes(mux)
 	gatewayPauseRoutes(mux)
-	gatewayModeRoutes(mux)
-	if !isWeb(w) {
-		appPageRoutes(mux)
-		remoteRoutes(mux, w)
+	if !edition.Enterprise() {
+		gatewayModeRoutes(mux)
 	}
 	privacyModelRoutes(mux)
 	maskingRoutes(mux)
@@ -2291,70 +2285,6 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, settingsState())
 	})
 	// and a plugin's own daily check-in, by its provider
-	mux.HandleFunc("POST /api/settings/plugin-checkin", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Provider string
-			On       bool
-		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			fail(rw, err)
-			return
-		}
-		if in.Provider == "" {
-			fail(rw, errors.New("no provider"))
-			return
-		}
-		s := settings.Load()
-		s.PluginCheckins = maps.Clone(s.PluginCheckins)
-		if s.PluginCheckins == nil {
-			s.PluginCheckins = map[string]bool{}
-		}
-		s.PluginCheckins[in.Provider] = in.On
-		if err := settings.Save(s); err != nil {
-			fail(rw, err)
-			return
-		}
-		writeJSON(rw, settingsState())
-	})
-	// and a switch a plugin declares for its provider (auth.options, #2038),
-	// by the plugin's own provider id, handed to the running host at once
-	mux.HandleFunc("POST /api/settings/plugin-option", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Provider string
-			Key      string
-			On       bool
-		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			fail(rw, err)
-			return
-		}
-		if in.Provider == "" || !pluginOptionKey.MatchString(in.Key) {
-			fail(rw, errors.New("no provider or no such option"))
-			return
-		}
-		s := settings.Load()
-		s.PluginOptions = maps.Clone(s.PluginOptions)
-		if s.PluginOptions == nil {
-			s.PluginOptions = map[string]map[string]bool{}
-		}
-		own := maps.Clone(s.PluginOptions[in.Provider])
-		if own == nil {
-			own = map[string]bool{}
-		}
-		own[in.Key] = in.On
-		s.PluginOptions[in.Provider] = own
-		if err := settings.Save(s); err != nil {
-			fail(rw, err)
-			return
-		}
-		// best effort: a host that misses it reads them when it next starts
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		_ = plugin.SetProviderOptions(ctx)
-		cancel()
-		writeJSON(rw, settingsState())
-	})
-	// and one account's daily check-in, whichever vendor's (#1902): off
-	// leaves it out while its vendor's is on
 	mux.HandleFunc("POST /api/settings/checkin-account", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Key string

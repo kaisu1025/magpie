@@ -20,8 +20,8 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/gateway"
-	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -336,9 +336,6 @@ type providerJSON struct {
 	// routing unless KeepSelf (provider.Provider.SelfAnswered)
 	Self     bool `json:"self,omitempty"`
 	KeepSelf bool `json:"keepSelf,omitempty"`
-	// LibraryMCP: a Remote magpie whose router is a Library server, or
-	// is to be one (library.RemoteMCPOn)
-	LibraryMCP bool `json:"libraryMCP,omitempty"`
 	// RemoteUpdate: a Remote magpie's word on its last ask to follow
 	// this magpie's version (remoteUpdateNote)
 	RemoteUpdate *remoteUpdateJSON `json:"remoteUpdate,omitempty"`
@@ -556,7 +553,7 @@ func accountLabel(p provider.Provider) (name, icon string) {
 	}
 	if pp, ok := provider.PluginOf(p.ID); ok {
 		// a plugin's sign-in: named for the provider it signs in to
-		name, icon = pp.Name, pluginIcon(pp)
+		name = pp.Name
 		if name == "" {
 			name = p.Name
 		}
@@ -706,7 +703,7 @@ type providersJSON struct {
 	// Codex's accounts have, after a switch (provider.CodexAppProjectsShort)
 	CodexProjects bool `json:"codexProjects,omitempty"`
 	// Plugins are the providers the plugins sign in to, for the add sheet
-	Plugins []pluginSubJSON `json:"plugins"`
+
 	// OnPlugins are the built-in subscriptions moved onto their plugins,
 	// which the add sheet offers as the plugin's alone
 	OnPlugins []string `json:"onPlugins,omitempty"`
@@ -1288,13 +1285,8 @@ func accountRests(id string) map[string][]provider.KeyRest {
 	return out
 }
 
-func providersState() providersJSON {
-	// an account signed in since start-up is listed with its vendor's
-	// models, not magpie's own list of them (#204): asked behind the page,
-	// which is told so and asks again, never waited for (#541)
-	provider.FetchNewBehind(8 * time.Second)
-	agents := agent.DetectedIn(heldAgents())
-	s := providersJSON{Providers: []providerJSON{}, Presets: []presetJSON{}, Excluded: []excludedJSON{}}
+// providerAccountState adds sign-in and migration notices to the provider list.
+func providerAccountState(s *providersJSON) {
 	s.OnPlugins = provider.OnPlugins()
 	s.Movable = provider.MovableIDs()
 	// a retired built-in whose plugin is installed is the plugin's, moved
@@ -1315,9 +1307,6 @@ func providersState() providersJSON {
 			s.Unmoved = append(s.Unmoved, c)
 		}
 	}
-	if err := provider.FileError(); err != nil {
-		s.FileError = err.Error()
-	}
 	hidden := map[string]provider.Provider{}
 	for _, p := range provider.Hidden() {
 		hidden[p.ID] = p
@@ -1333,11 +1322,26 @@ func providersState() providersJSON {
 		}
 		s.Excluded = append(s.Excluded, e)
 	}
+}
+
+func providersState() providersJSON {
+	// an account signed in since start-up is listed with its vendor's
+	// models, not magpie's own list of them (#204): asked behind the page,
+	// which is told so and asks again, never waited for (#541)
+	provider.FetchNewBehind(8 * time.Second)
+	agents := agent.DetectedIn(heldAgents())
+	s := providersJSON{Providers: []providerJSON{}, Presets: []presetJSON{}, Excluded: []excludedJSON{}}
+	desktopEdition := edition.Current() == edition.Desktop
+	if !desktopEdition {
+		providerAccountState(&s)
+	}
+	if err := provider.FileError(); err != nil {
+		s.FileError = err.Error()
+	}
 	findGroup := groupsOnce(provider.GroupFinder())
 	uses := agentUses(agents, findGroup)
 	desktop := desktopNumbers(uses)
 	have := map[string]bool{}
-	var remoteMCP map[string]bool // read once, at the first Remote magpie
 	all := provider.All()
 	// both lists made once at their size: each grown by append was 6 MB of
 	// what forty polls of the Providers page allocated with real accounts
@@ -1348,13 +1352,6 @@ func providersState() providersJSON {
 		// a preset is added once any provider is its, whatever its id
 		have[p.ID], have[p.Preset] = true, true
 		info := providerInfoWith(p, provider.KeptListing(p), uses, desktop)
-		if p.IsRemoteMagpie() {
-			if remoteMCP == nil {
-				remoteMCP = library.RemoteMCPOn()
-			}
-			info.LibraryMCP = remoteMCP[p.ID]
-			info.RemoteUpdate = remoteUpdateNote(p.ID, time.Now())
-		}
 		s.Providers = append(s.Providers, info)
 	}
 	// partners first, as the add sheet lists them
@@ -1362,6 +1359,9 @@ func providersState() providersJSON {
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pa.PresetDef, Added: have[pa.ID], Notes: pa.Notes, Langs: pa.Langs, New: !have[pa.ID] && !provider.PartnerNoticed(pa.ID), OwnClient: presetOwnClient(pa.PresetDef)})
 	}
 	for _, pr := range presets {
+		if desktopEdition && pr.ID != provider.RemoteMagpiePreset {
+			continue
+		}
 		bases := provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic}
 		team := provider.TakesZhipuTeam(bases)
 		vendor, keyRegions := presetAccessKey(pr)
@@ -1426,7 +1426,6 @@ func providersState() providersJSON {
 	s.CodexDaemon = provider.CodexDaemonStale()
 	s.CodexApp = provider.CodexAppStale()
 	s.CodexProjects = provider.CodexAppProjectsShort()
-	s.Plugins = pluginSubs()
 	s.Fetching = provider.FetchingNew()
 	return s
 }
@@ -1462,8 +1461,9 @@ func moveContext(r *http.Request) (context.Context, context.CancelFunc) {
 var appLink = agent.OpenAppLink
 
 func providerRoutes(mux *http.ServeMux, w Windows) {
-	importAppsRoutes(mux)
-	pluginRoutes(mux, w)
+	if !edition.Enterprise() {
+		importAppsRoutes(mux)
+	}
 	traceRoutes(mux)
 	contextRoutesAPI(mux)
 	tuneRoutes(mux)
@@ -1720,10 +1720,6 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			ClearAccessKey bool    `json:"clearAccessKey"`
 			// From is the id the provider had: another is a rename
 			From string `json:"from"`
-			// LibraryMCP, on a Remote magpie, is its editor's switch: its
-			// router a Library server (library.SetRemoteMCP); left out,
-			// it stays as it is
-			LibraryMCP *bool `json:"libraryMCP"`
 			// CopyOf, with New, is the provider the new one is a copy of
 			// (#268): its key and what else the form doesn't carry are
 			// taken from it when left out
@@ -2416,18 +2412,6 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					return
 				}
 			}
-			// a Remote magpie's router given a server or taken out, before
-			// its list below asks it
-			askHub := false
-			if req.LibraryMCP != nil {
-				if p, err := provider.Find(in.ID); err == nil && p.IsRemoteMagpie() && library.RemoteMCPOn()[in.ID] != *req.LibraryMCP {
-					if _, err := library.SetRemoteMCP(in.ID, *req.LibraryMCP); err != nil {
-						fail(rw, err)
-						return
-					}
-					askHub = *req.LibraryMCP
-				}
-			}
 			provider.ForgetBalances()
 			if old == nil || old.AccessKeyID != in.AccessKeyID || old.SecretAccessKey != in.SecretAccessKey {
 				// the plan's windows are read afresh with the new access key
@@ -2449,8 +2433,6 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				wg.Go(func() { provider.PrefillNewKeys(ctx, had, in.ID) })
 				if old == nil || old.Key != p.Key {
 					p.Fetch(ctx)
-				} else if askHub {
-					provider.AskRemoteHub(ctx, in.ID)
 				}
 				wg.Wait()
 				cancel()
@@ -3106,6 +3088,74 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		st.Moved, st.Added, st.Had, st.Removed = moved, added, had, removed
 		writeJSON(rw, st)
 	})
+	if edition.Current() != edition.Desktop {
+		providerSubscriptionRoutes(mux, w)
+	}
+	// the page copies through here first: in the app's window the
+	// clipboard API is refused or missing, depending on the system
+	mux.HandleFunc("POST /api/copy", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Text string }
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if in.Text == "" || !w.Copy(in.Text) {
+			http.Error(rw, "", http.StatusNotImplemented)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
+	// the add sheet counts what it showed of the partners and what was
+	// opened of them (provider.CountPartner); only listed partners count.
+	// Those shown are no longer new (provider.NoticePartners).
+	mux.HandleFunc("POST /api/partner", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			What string
+			IDs  []string
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
+		if len(in.IDs) <= provider.MaxPartners {
+			provider.CountPartner(in.What, in.IDs...)
+			if in.What == provider.PartnerShown {
+				provider.NoticePartners(in.IDs...)
+			}
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/open", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ URL string }
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		// and System Settings' Login Items, where Open at login is allowed
+		// again: that one pane, not System Settings' scheme at large
+		if strings.HasPrefix(in.URL, "https://") || strings.HasPrefix(in.URL, "http://") || strings.HasPrefix(in.URL, agent.CindyScheme) || strings.HasPrefix(in.URL, agent.LodyScheme) || strings.HasPrefix(in.URL, agent.AionUiScheme) || strings.HasPrefix(in.URL, agent.CherryStudioScheme) || in.URL == autostart.LoginItemsURL {
+			open := w.OpenURL
+			// an app's import link is handed over only when something
+			// here opens it: the system says nothing when nothing does,
+			// and Add magpie did nothing at all (sungt, 10-29)
+			app := func(u string) error { return appLink(u, w.OpenURL) }
+			switch {
+			case strings.HasPrefix(in.URL, agent.LodyScheme):
+				// Lody on Linux is run with the link, which xdg-open
+				// turned away (agent.OpenLody)
+				open = func(u string) error { return agent.OpenLody(u, app) }
+			case strings.HasPrefix(in.URL, agent.CindyScheme), strings.HasPrefix(in.URL, agent.AionUiScheme), strings.HasPrefix(in.URL, agent.CherryStudioScheme):
+				open = app
+			}
+			// Open again on a sign-in says why it didn't open (#2043)
+			if err := open(in.URL); err != nil {
+				fail(rw, err)
+				return
+			}
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// testRuns: the provider tests under way by the name the window gave each
+// (Run), each with what ends it: Stop ends the test's requests to the
+// vendor, here as well as by the fetch it aborts, which WebView2 doesn't
+// end the request's context for (RIck on Discord: a test couldn't be
+// stopped)
+var testRuns sync.Map
+
+func providerSubscriptionRoutes(mux *http.ServeMux, w Windows) {
 	// Adding a subscription: magpie opens the vendor's sign-in in the
 	// browser and the window follows it until the account is in.
 	mux.HandleFunc("POST /api/signin", func(rw http.ResponseWriter, r *http.Request) {
@@ -3313,69 +3363,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeProvidersJSON(rw, providersState())
 	})
-	// the page copies through here first: in the app's window the
-	// clipboard API is refused or missing, depending on the system
-	mux.HandleFunc("POST /api/copy", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Text string }
-		_ = json.NewDecoder(r.Body).Decode(&in)
-		if in.Text == "" || !w.Copy(in.Text) {
-			http.Error(rw, "", http.StatusNotImplemented)
-			return
-		}
-		rw.WriteHeader(http.StatusNoContent)
-	})
-	// the add sheet counts what it showed of the partners and what was
-	// opened of them (provider.CountPartner); only listed partners count.
-	// Those shown are no longer new (provider.NoticePartners).
-	mux.HandleFunc("POST /api/partner", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct {
-			What string
-			IDs  []string
-		}
-		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
-		if len(in.IDs) <= provider.MaxPartners {
-			provider.CountPartner(in.What, in.IDs...)
-			if in.What == provider.PartnerShown {
-				provider.NoticePartners(in.IDs...)
-			}
-		}
-		rw.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /api/open", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ URL string }
-		_ = json.NewDecoder(r.Body).Decode(&in)
-		// and System Settings' Login Items, where Open at login is allowed
-		// again: that one pane, not System Settings' scheme at large
-		if strings.HasPrefix(in.URL, "https://") || strings.HasPrefix(in.URL, "http://") || strings.HasPrefix(in.URL, agent.CindyScheme) || strings.HasPrefix(in.URL, agent.LodyScheme) || strings.HasPrefix(in.URL, agent.AionUiScheme) || strings.HasPrefix(in.URL, agent.CherryStudioScheme) || in.URL == autostart.LoginItemsURL {
-			open := w.OpenURL
-			// an app's import link is handed over only when something
-			// here opens it: the system says nothing when nothing does,
-			// and Add magpie did nothing at all (sungt, 10-29)
-			app := func(u string) error { return appLink(u, w.OpenURL) }
-			switch {
-			case strings.HasPrefix(in.URL, agent.LodyScheme):
-				// Lody on Linux is run with the link, which xdg-open
-				// turned away (agent.OpenLody)
-				open = func(u string) error { return agent.OpenLody(u, app) }
-			case strings.HasPrefix(in.URL, agent.CindyScheme), strings.HasPrefix(in.URL, agent.AionUiScheme), strings.HasPrefix(in.URL, agent.CherryStudioScheme):
-				open = app
-			}
-			// Open again on a sign-in says why it didn't open (#2043)
-			if err := open(in.URL); err != nil {
-				fail(rw, err)
-				return
-			}
-		}
-		rw.WriteHeader(http.StatusNoContent)
-	})
 }
-
-// testRuns: the provider tests under way by the name the window gave each
-// (Run), each with what ends it: Stop ends the test's requests to the
-// vendor, here as well as by the fetch it aborts, which WebView2 doesn't
-// end the request's context for (RIck on Discord: a test couldn't be
-// stopped)
-var testRuns sync.Map
 
 // typed is the saved provider p as the editor's form has it (in), for
 // Refresh and Test models before a Save: a key pasted to replace the saved

@@ -26,6 +26,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/lazyre"
@@ -1040,6 +1041,9 @@ func ownOf(f file) (own []Provider, picks map[string]Provider) {
 	picks = map[string]Provider{}
 	for _, p := range f.Providers {
 		p = normalize(p)
+		if edition.Current() == edition.Desktop && !p.IsRemoteMagpie() {
+			continue
+		}
 		if !hasEndpoint(p) {
 			picks[p.ID] = p
 			continue
@@ -1222,6 +1226,9 @@ func Save(p Provider) error {
 		return errors.New("a base URL is for an API key: Google credentials are sent only to Google's own address")
 	}
 	p = normalize(p)
+	if edition.Current() == edition.Desktop && !p.IsRemoteMagpie() {
+		return errors.New("the enterprise desktop takes Remote magpie providers")
+	}
 	p.IconURL = "" // import-only: never stored
 	// where a picture came from goes only with that picture
 	if p.IconFrom = strings.TrimSpace(p.IconFrom); !strings.HasPrefix(p.Icon, iconPrefix) {

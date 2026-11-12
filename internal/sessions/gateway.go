@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yetone/magpie/internal/edition"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -74,6 +75,9 @@ func SaveGatewayTurnGeneration(turn GatewayTurn, generation uint64) error {
 }
 
 func saveGatewayTurn(turn GatewayTurn, generation uint64) error {
+	if edition.Enterprise() {
+		return nil
+	}
 	gatewayMu.Lock()
 	allowed := settings.Load().GatewayConversations && generation == gatewayGeneration
 	gatewayMu.Unlock()

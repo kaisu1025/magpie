@@ -129,8 +129,16 @@ func unreachableStop(args []string) {
 		return
 	}
 	fmt.Fprintln(os.Stderr, "magpie:", err)
-	if hasGUI && (len(args) == 0 || servesPages(args) && args[0] != "serve" && args[0] != "tui" && args[0] != "web") {
+	if hasGUI && (len(args) == 0 || desktopCommand(args[0])) {
 		alert("magpie", err.Error())
 	}
 	os.Exit(1)
+}
+
+func desktopCommand(cmd string) bool {
+	switch cmd {
+	case "app", "gui", "tray", "panel", "-Embedding":
+		return true
+	}
+	return strings.HasPrefix(strings.ToLower(cmd), "magpie:")
 }
